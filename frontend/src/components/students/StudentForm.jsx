@@ -2,7 +2,7 @@ import React from 'react';
 import { X, Save } from 'lucide-react';
 import { CORE_COURSES, ENROLLMENT_STATUSES, YEAR_LEVELS } from '../../lib/formOptions';
 
-export const StudentForm = React.memo(({ onSubmit, onCancel, title, formData, setFormData }) => {
+export const StudentForm = React.memo(({ onSubmit, onCancel, title, formData, setFormData, lockedCourse = '' }) => {
   const handleChange = React.useCallback((field, value) => {
     setFormData(prev => ({...prev, [field]: value}));
   }, [setFormData]);
@@ -10,6 +10,7 @@ export const StudentForm = React.memo(({ onSubmit, onCancel, title, formData, se
   const sanitizeName = React.useCallback((value) => value.replace(/[^A-Za-z .'-]/g, ''), []);
   const sanitizeStudentId = React.useCallback((value) => value.replace(/[^A-Za-z0-9-]/g, '').toUpperCase(), []);
   const sanitizePhone = React.useCallback((value) => value.replace(/\D/g, '').slice(0, 11), []);
+  const sanitizeSection = React.useCallback((value) => value.replace(/[^A-Za-z0-9-]/g, '').toUpperCase().slice(0, 10), []);
 
   return (
     <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onCancel}>
@@ -41,13 +42,17 @@ export const StudentForm = React.memo(({ onSubmit, onCancel, title, formData, se
                 required
                 autoComplete="off"
                 className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none transition-all"
-                value={formData.course || 'BSIT'}
+                value={lockedCourse || formData.course || 'BSIT'}
                 onChange={(e) => handleChange('course', e.target.value)}
+                disabled={Boolean(lockedCourse)}
               >
                 {CORE_COURSES.map((course) => (
                   <option key={course}>{course}</option>
                 ))}
               </select>
+              {lockedCourse ? (
+                <p className="mt-1 text-xs text-gray-400">Course is fixed to your department.</p>
+              ) : null}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">First Name *</label>
@@ -85,6 +90,17 @@ export const StudentForm = React.memo(({ onSubmit, onCancel, title, formData, se
               />
             </div>
             <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Birthday *</label>
+              <input
+                type="date"
+                required
+                autoComplete="off"
+                className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none transition-all"
+                value={formData.birthday || ''}
+                onChange={(e) => handleChange('birthday', e.target.value)}
+              />
+            </div>
+            <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Year Level *</label>
               <select
                 required
@@ -97,6 +113,18 @@ export const StudentForm = React.memo(({ onSubmit, onCancel, title, formData, se
                   <option key={yearLevel}>{yearLevel}</option>
                 ))}
               </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Section</label>
+              <input
+                type="text"
+                autoComplete="off"
+                className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none transition-all"
+                value={formData.section || ''}
+                onChange={(e) => handleChange('section', sanitizeSection(e.target.value))}
+                placeholder="e.g., A"
+                maxLength={10}
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
@@ -163,7 +191,8 @@ export const StudentForm = React.memo(({ onSubmit, onCancel, title, formData, se
     prevProps.title === nextProps.title &&
     prevProps.formData === nextProps.formData &&
     prevProps.onSubmit === nextProps.onSubmit &&
-    prevProps.onCancel === nextProps.onCancel
+    prevProps.onCancel === nextProps.onCancel &&
+    prevProps.lockedCourse === nextProps.lockedCourse
   );
 });
 

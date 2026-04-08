@@ -39,6 +39,7 @@ def get_reports():
         }), 500
 
 @reports_bp.route('', methods=['POST'])
+@require_roles(['DEAN', 'CHAIR', 'SECRETARY'])
 def create_report():
     """Create a new report"""
     try:
@@ -127,6 +128,7 @@ def get_report(report_id):
         }), 500
 
 @reports_bp.route('/<int:report_id>', methods=['PUT'])
+@require_roles(['DEAN', 'CHAIR', 'SECRETARY'])
 def update_report(report_id):
     """Update a report"""
     try:

@@ -660,16 +660,19 @@ class Student(BaseModel):
         "first_name": None,
         "last_name": None,
         "middle_name": None,
+        "birthday": None,
         "email": None,
         "contact_number": None,
         "course": None,
         "year_level": None,
+        "section": None,
         "enrollment_status": "Enrolled",
         "tenant_id": None,
         "created_at": datetime.utcnow,
     }
+    date_fields = {"birthday"}
     datetime_fields = {"created_at"}
-    indexes = [["student_id"], ["tenant_id"], ["course"], ["year_level"], ["last_name"], ["first_name"]]
+    indexes = [["student_id"], ["tenant_id"], ["course"], ["year_level"], ["section"], ["last_name"], ["first_name"]]
 
     @property
     def skills(self):
@@ -713,10 +716,12 @@ class Student(BaseModel):
             "first_name": self.first_name,
             "last_name": self.last_name,
             "middle_name": self.middle_name,
+            "birthday": self.birthday.isoformat() if self.birthday else None,
             "email": self.email,
             "contact_number": self.contact_number,
             "course": self.course,
             "year_level": self.year_level,
+            "section": self.section,
             "enrollment_status": self.enrollment_status,
             "skills": [
                 {
@@ -857,6 +862,7 @@ class Faculty(BaseModel):
         "first_name": None,
         "last_name": None,
         "middle_name": None,
+        "birthday": None,
         "email": None,
         "contact_number": None,
         "department": None,
@@ -866,7 +872,7 @@ class Faculty(BaseModel):
         "tenant_id": None,
         "created_at": datetime.utcnow,
     }
-    date_fields = {"employment_start_date"}
+    date_fields = {"birthday", "employment_start_date"}
     datetime_fields = {"created_at"}
     indexes = [["employee_number"], ["tenant_id"], ["last_name"], ["first_name"]]
 
@@ -877,6 +883,7 @@ class Faculty(BaseModel):
             "first_name": self.first_name,
             "last_name": self.last_name,
             "middle_name": self.middle_name,
+            "birthday": self.birthday.isoformat() if self.birthday else None,
             "email": self.email,
             "contact_number": self.contact_number,
             "department": self.department,

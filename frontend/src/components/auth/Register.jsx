@@ -138,6 +138,7 @@ export const Register = ({ onRegisterSuccess, onSwitchToLogin }) => {
                 <option value="DEAN">Dean</option>
                 <option value="CHAIR">Chair</option>
                 <option value="SECRETARY">Secretary</option>
+                <option value="STUDENT">Student</option>
               </select>
             </div>
 

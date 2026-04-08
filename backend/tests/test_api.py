@@ -88,6 +88,7 @@ class CCSApiSmokeTests(unittest.TestCase):
                 'first_name': 'Jamie',
                 'last_name': 'Torres',
                 'middle_name': 'A.',
+                'birthday': '2004-09-12',
                 'email': 'jamie.torres@example.com',
                 'contact_number': '09171112222',
                 'course': 'BSIT',
@@ -97,7 +98,18 @@ class CCSApiSmokeTests(unittest.TestCase):
         )
         self.assertEqual(create_response.status_code, 201)
         student = create_response.get_json()['data']
+        student_account = create_response.get_json()['account']
         student_id = student['id']
+        self.assertEqual(student_account['email'], '2026-0999')
+        self.assertEqual(student_account['password'], '2004-09-12')
+        self.assertEqual(student_account['role'], 'STUDENT')
+
+        student_login = self.client.post(
+            '/api/auth/login',
+            json={'email': student_account['email'], 'password': student_account['password']},
+        )
+        self.assertEqual(student_login.status_code, 200)
+        self.assertEqual(student_login.get_json()['user']['role'], 'STUDENT')
 
         skill_response = self.client.post(
             f'/api/students/{student_id}/skills',
@@ -161,6 +173,7 @@ class CCSApiSmokeTests(unittest.TestCase):
                 'first_name': 'Jamie',
                 'last_name': 'Torres',
                 'middle_name': 'A.',
+                'birthday': '2004-09-12',
                 'email': 'jamie.updated@example.com',
                 'contact_number': '09171112222',
                 'course': 'BSIT',
@@ -175,6 +188,67 @@ class CCSApiSmokeTests(unittest.TestCase):
         self.assertEqual(delete_response.status_code, 200)
         self.assertTrue(delete_response.get_json()['success'])
 
+    def test_student_self_profile_and_scoped_list(self):
+        first_student = self.client.post(
+            '/api/students',
+            json={
+                'student_id': '2026-8101',
+                'first_name': 'Nico',
+                'last_name': 'Velasco',
+                'birthday': '2005-04-12',
+                'course': 'BSIT',
+                'year_level': '1st Year',
+                'section': 'D',
+                'email': 'nico.velasco@student.ccs.local',
+            },
+        )
+        self.assertEqual(first_student.status_code, 201)
+
+        second_student = self.client.post(
+            '/api/students',
+            json={
+                'student_id': '2026-8102',
+                'first_name': 'Iris',
+                'last_name': 'Aquino',
+                'birthday': '2005-08-22',
+                'course': 'BSIT',
+                'year_level': '1st Year',
+                'section': 'd',
+            },
+        )
+        self.assertEqual(second_student.status_code, 201)
+
+        other_section_student = self.client.post(
+            '/api/students',
+            json={
+                'student_id': '2026-8103',
+                'first_name': 'Paolo',
+                'last_name': 'Mora',
+                'birthday': '2005-02-04',
+                'course': 'BSIT',
+                'year_level': '1st Year',
+                'section': 'E',
+            },
+        )
+        self.assertEqual(other_section_student.status_code, 201)
+
+        student_login = self.client.post(
+            '/api/auth/login',
+            json={'email': '2026-8101', 'password': '2005-04-12'},
+        )
+        self.assertEqual(student_login.status_code, 200)
+        student_actor = student_login.get_json()['user']
+        headers = {'X-Actor-Id': str(student_actor['id'])}
+
+        profile_response = self.client.get('/api/students/me', headers=headers)
+        self.assertEqual(profile_response.status_code, 200)
+        self.assertEqual(profile_response.get_json()['data']['student_id'], '2026-8101')
+
+        scoped_response = self.client.get('/api/students', headers=headers)
+        self.assertEqual(scoped_response.status_code, 200)
+        scoped_ids = {item['student_id'] for item in scoped_response.get_json()['data']}
+        self.assertEqual(scoped_ids, {'2026-8101', '2026-8102'})
+
     def test_faculty_crud(self):
         create_response = self.client.post(
             '/api/faculty',
@@ -183,6 +257,7 @@ class CCSApiSmokeTests(unittest.TestCase):
                 'first_name': 'Lea',
                 'last_name': 'Mendoza',
                 'middle_name': 'R.',
+                'birthday': '1992-01-18',
                 'email': 'lea.mendoza@example.com',
                 'contact_number': '09179998888',
                 'department': 'BSIT',
@@ -192,7 +267,19 @@ class CCSApiSmokeTests(unittest.TestCase):
             },
         )
         self.assertEqual(create_response.status_code, 201)
-        faculty_id = create_response.get_json()['data']['id']
+        faculty = create_response.get_json()['data']
+        faculty_account = create_response.get_json()['account']
+        faculty_id = faculty['id']
+        self.assertEqual(faculty_account['email'], 'FAC-9090')
+        self.assertEqual(faculty_account['password'], '1992-01-18')
+        self.assertEqual(faculty_account['role'], 'FACULTY')
+
+        faculty_login = self.client.post(
+            '/api/auth/login',
+            json={'email': faculty_account['email'], 'password': faculty_account['password']},
+        )
+        self.assertEqual(faculty_login.status_code, 200)
+        self.assertEqual(faculty_login.get_json()['user']['role'], 'FACULTY')
 
         update_response = self.client.put(
             f'/api/faculty/{faculty_id}',
@@ -201,6 +288,7 @@ class CCSApiSmokeTests(unittest.TestCase):
                 'first_name': 'Lea',
                 'last_name': 'Mendoza',
                 'middle_name': 'R.',
+                'birthday': '1992-01-18',
                 'email': 'lea.updated@example.com',
                 'contact_number': '09179998888',
                 'department': 'BSIT',
@@ -231,6 +319,34 @@ class CCSApiSmokeTests(unittest.TestCase):
         )
         self.assertEqual(invalid_response.status_code, 400)
 
+        create_student_one = self.client.post(
+            '/api/students',
+            json={
+                'student_id': '2026-3001',
+                'first_name': 'Casey',
+                'last_name': 'Lopez',
+                'birthday': '2005-01-20',
+                'course': 'BSIT',
+                'year_level': '3rd Year',
+                'section': 'C',
+            },
+        )
+        self.assertEqual(create_student_one.status_code, 201)
+
+        create_student_two = self.client.post(
+            '/api/students',
+            json={
+                'student_id': '2026-3002',
+                'first_name': 'Jordan',
+                'last_name': 'Tan',
+                'birthday': '2004-12-11',
+                'course': 'BSIT',
+                'year_level': '3rd Year',
+                'section': 'c',
+            },
+        )
+        self.assertEqual(create_student_two.status_code, 201)
+
         create_response = self.client.post(
             '/api/schedules',
             json={
@@ -247,10 +363,26 @@ class CCSApiSmokeTests(unittest.TestCase):
             },
         )
         self.assertEqual(create_response.status_code, 201)
-        schedule_id = create_response.get_json()['data']['id']
+        created_schedule = create_response.get_json()['data']
+        schedule_id = created_schedule['id']
+        self.assertEqual(created_schedule['students'], 2)
 
         filter_response = self.client.get('/api/schedules?course=BSIT&day=Thursday')
         self.assertTrue(any(item['id'] == schedule_id for item in filter_response.get_json()['data']))
+
+        create_student_three = self.client.post(
+            '/api/students',
+            json={
+                'student_id': '2026-3003',
+                'first_name': 'Avery',
+                'last_name': 'Garcia',
+                'birthday': '2005-03-03',
+                'course': 'BSIT',
+                'year_level': '3rd Year',
+                'section': 'D',
+            },
+        )
+        self.assertEqual(create_student_three.status_code, 201)
 
         update_response = self.client.put(
             f'/api/schedules/{schedule_id}',
@@ -262,9 +394,13 @@ class CCSApiSmokeTests(unittest.TestCase):
                 'day': 'Thursday',
                 'start_time': '1:00 PM',
                 'end_time': '3:00 PM',
+                'students': 99,
+                'year_level': '3rd Year',
+                'section': 'D',
             },
         )
         self.assertEqual(update_response.status_code, 200)
+        self.assertEqual(update_response.get_json()['data']['students'], 1)
 
         delete_response = self.client.delete(f'/api/schedules/{schedule_id}')
         self.assertEqual(delete_response.status_code, 200)
