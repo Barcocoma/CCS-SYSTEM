@@ -7,7 +7,6 @@ from datetime import datetime
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
-from authz import resolve_actor_department, resolve_effective_role
 from audit import log_audit_event
 from models import db, User
 
@@ -17,17 +16,6 @@ def validate_email(email):
     """Validate email format"""
     pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
     return re.match(pattern, email) is not None
-
-
-def validate_account_identifier(identifier):
-    """Validate ID-style account identifiers like 2026-0001 or FAC-1001."""
-    pattern = r'^[a-zA-Z0-9-]+$'
-    return re.match(pattern, identifier) is not None
-
-
-def validate_login_identifier(identifier):
-    return validate_email(identifier) or validate_account_identifier(identifier)
-
 
 @auth_bp.route('/register', methods=['POST'])
 def register():
@@ -49,13 +37,13 @@ def register():
         if not email:
             return jsonify({'success': False, 'message': 'Email is required'}), 400
         
-        if not validate_login_identifier(email):
-            return jsonify({'success': False, 'message': 'Invalid email or account ID format'}), 400
+        if not validate_email(email):
+            return jsonify({'success': False, 'message': 'Invalid email format'}), 400
         
         if not password or len(password) < 6:
             return jsonify({'success': False, 'message': 'Password must be at least 6 characters'}), 400
         
-        if role not in ['DEAN', 'CHAIR', 'FACULTY', 'SECRETARY', 'STUDENT']:
+        if role not in ['DEAN', 'CHAIR', 'FACULTY', 'SECRETARY']:
             return jsonify({'success': False, 'message': 'Invalid role'}), 400
         
         # Check if user already exists
@@ -103,18 +91,18 @@ def login():
     """User login endpoint"""
     try:
         data = request.get_json()
-        email = data.get('email', '').strip()
+        email = data.get('email', '').strip().lower()
         password = data.get('password', '')
         tenant_id = (data.get('tenant_id') or data.get('tenantId') or '').strip() or None
         
         if not email or not password:
             return jsonify({'success': False, 'message': 'Email and password are required'}), 400
         
-        # Find user by email or ID, case-insensitive (optionally tenant_id)
-        query = User.query.filter(User.email.ilike(email))
+        # Find user by email (optionally tenant_id)
         if tenant_id:
-            query = query.filter(User.tenant_id == tenant_id)
-        user = query.first()
+            user = User.query.filter_by(email=email, tenant_id=tenant_id).first()
+        else:
+            user = User.query.filter_by(email=email).first()
         
         if not user:
             return jsonify({'success': False, 'message': 'Invalid email or password'}), 401
@@ -138,19 +126,10 @@ def login():
             tenant_id=user.tenant_id,
         )
         
-        user_payload = user.to_dict_safe()
-        effective_role = resolve_effective_role(user)
-        if effective_role:
-            user_payload['role'] = effective_role
-
-        department = resolve_actor_department(user)
-        if department:
-            user_payload['department'] = department
-
         return jsonify({
             'success': True,
             'message': 'Login successful',
-            'user': user_payload
+            'user': user.to_dict_safe()
         }), 200
         
     except Exception as e:
@@ -207,8 +186,8 @@ def update_account(user_id):
         if not email:
             return jsonify({'success': False, 'message': 'Email is required'}), 400
 
-        if not validate_login_identifier(email):
-            return jsonify({'success': False, 'message': 'Invalid email or account ID format'}), 400
+        if not validate_email(email):
+            return jsonify({'success': False, 'message': 'Invalid email format'}), 400
 
         existing_username = User.query.filter_by(username=username).first()
         if existing_username and existing_username.id != user.id:
