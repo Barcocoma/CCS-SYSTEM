@@ -22,6 +22,17 @@ const actionColors = {
 };
 
 export const AuditLogs = () => {
+  const ENTITY_OPTIONS = [
+    'All Entities',
+    'STUDENT',
+    'FACULTY',
+    'SCHEDULE',
+    'RESEARCH',
+    'REPORT',
+    'USER',
+  ];
+  const entityOptions = ENTITY_OPTIONS;
+
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -39,7 +50,7 @@ export const AuditLogs = () => {
       setLoading(true);
       const params = new URLSearchParams();
       if (filterAction !== 'All Actions') params.append('action', filterAction);
-      if (filterEntity !== 'All Entities') params.append('entity_type', filterEntity);
+      if (filterEntity !== 'All Entities') params.append('entity_type', filterEntity.toUpperCase());
       params.append('limit', '100');
       
       const response = await fetch(`${API_URL}/api/audit-logs?${params}`);
@@ -77,13 +88,26 @@ export const AuditLogs = () => {
 
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
-    const date = new Date(dateString);
+    // Ensure we have an ISO string with timezone so Safari/older engines don't produce Invalid Date
+    const normalized = (() => {
+      // already ISO with timezone
+      if (/[zZ]|[+-]\d\d:?\d\d$/.test(dateString)) return dateString;
+      // if it looks like "2026-04-10T08:52:41" (no zone), append Z to treat as UTC
+      if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(dateString)) return `${dateString}Z`;
+      return dateString;
+    })();
+
+    const date = new Date(normalized);
+    if (Number.isNaN(date.getTime())) return 'N/A';
+
     return date.toLocaleString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
+      second: '2-digit',
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     });
   };
 
@@ -174,13 +198,9 @@ export const AuditLogs = () => {
             onChange={(e) => setFilterEntity(e.target.value)}
             className="bg-gray-50 border-none text-sm font-medium rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-orange-500/20"
           >
-            <option>All Entities</option>
-            <option>STUDENT</option>
-            <option>FACULTY</option>
-            <option>SCHEDULE</option>
-            <option>RESEARCH</option>
-            <option>REPORT</option>
-            <option>USER</option>
+            {entityOptions.map((option) => (
+              <option key={option}>{option}</option>
+            ))}
           </select>
         </div>
       </div>
@@ -218,13 +238,13 @@ export const AuditLogs = () => {
                         <span className="text-sm font-medium text-gray-900">{log.username}</span>
                       </div>
                     </td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold border ${actionColors[log.action] || 'bg-gray-50 text-gray-700 border-gray-200'}`}>
-                        {actionIcons[log.action] || <Activity size={14} />}
-                        {log.action}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">{log.entity_type}</td>
+                  <td className="px-6 py-4">
+                    <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold border ${actionColors[log.action] || 'bg-gray-50 text-gray-700 border-gray-200'}`}>
+                      {actionIcons[log.action] || <Activity size={14} />}
+                      {log.action}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-600">{log.entity_type || '—'}</td>
                     <td className="px-6 py-4 text-sm text-gray-700 font-medium">
                       {log.entity_name || '-'}
                     </td>
@@ -241,4 +261,3 @@ export const AuditLogs = () => {
     </div>
   );
 };
-

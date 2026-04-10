@@ -2,6 +2,15 @@
 
 const SessionContext = createContext(null);
 
+function normalizeRole(role) {
+  if (!role || typeof role !== 'string') {
+    return 'FACULTY';
+  }
+
+  const normalized = role.trim().toUpperCase();
+  return normalized || 'FACULTY';
+}
+
 function readStoredUser() {
   if (typeof window === 'undefined') {
     return null;
@@ -17,12 +26,12 @@ function readStoredUser() {
 
 export function SessionProvider({ children }) {
   const [user, setUser] = useState(readStoredUser);
-  const [accessRole, setAccessRole] = useState(() => readStoredUser()?.role || 'FACULTY');
+  const [accessRole, setAccessRole] = useState(() => normalizeRole(readStoredUser()?.role));
 
   useEffect(() => {
     if (user) {
       localStorage.setItem('user', JSON.stringify(user));
-      setAccessRole(user.role || 'FACULTY');
+      setAccessRole(normalizeRole(user.role));
       return;
     }
 

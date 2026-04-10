@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timezone
 from typing import Any
 
 from flask import Request, request
@@ -50,6 +51,7 @@ def log_audit_event(
         details=details_value,
         ip_address=actor['ip_address'],
         tenant_id=tenant_id if tenant_id is not None else actor['tenant_id'],
+        created_at=datetime.now(timezone.utc),
     )
 
     try:

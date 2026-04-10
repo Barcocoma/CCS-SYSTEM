@@ -169,7 +169,7 @@ export const Dashboard = ({ onNavigate }) => {
       icon: Calendar,
       trend: stats.upcomingEvents > 0 ? `Next: ${events[0]?.title || 'Event'}` : 'No events',
       up: stats.upcomingEvents > 0,
-      onClick: () => onNavigate?.('reports'),
+      onClick: () => onNavigate?.('events'),
     },
   ];
 
@@ -189,15 +189,15 @@ export const Dashboard = ({ onNavigate }) => {
             key={index}
             type="button"
             onClick={stat.onClick}
-            className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow text-left hover:border-orange-200"
+            className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm hover:shadow-lg transition-shadow text-left hover:border-orange-200 min-h-[170px]"
           >
             <div className="flex items-start justify-between mb-4">
-              <div className="p-3 bg-gray-50 rounded-xl">
-                <stat.icon className="text-gray-600" size={24} />
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gray-50 text-gray-600">
+                <stat.icon size={24} />
               </div>
               <div
                 className={cn(
-                  'flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full',
+                  'flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full',
                   stat.up ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600',
                 )}
               >
@@ -205,8 +205,8 @@ export const Dashboard = ({ onNavigate }) => {
                 {stat.trend}
               </div>
             </div>
-            <p className="text-xs font-bold text-gray-400 tracking-wider mb-1">{stat.label}</p>
-            <h3 className="text-3xl font-bold text-gray-900">{stat.value}</h3>
+            <p className="text-[11px] font-bold text-gray-400 tracking-[0.24em] uppercase mb-2">{stat.label}</p>
+            <h3 className="text-4xl font-bold text-gray-900">{stat.value}</h3>
           </button>
         ))}
       </div>

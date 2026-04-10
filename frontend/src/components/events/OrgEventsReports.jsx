@@ -21,8 +21,7 @@ import { cn } from '../../constants';
 import { useUI } from '../ui/UIProvider';
 import { apiRequest } from '../../lib/api';
 import { EVENT_CATEGORIES, EVENT_STATUSES } from '../../lib/formOptions';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+import { useSession } from '../../context/SessionProvider';
 
 const emptyEventForm = {
   title: '',
@@ -93,6 +92,8 @@ const formatEventDate = (dateValue) => {
 
 export const OrgEventsReports = ({ navigationIntent, clearNavigationIntent }) => {
   const { showError, showSuccess, confirm } = useUI();
+  const { accessRole } = useSession();
+  const canManageEvents = accessRole === 'DEAN' || accessRole === 'CHAIR' || accessRole === 'SECRETARY';
   const [reports, setReports] = useState([]);
   const [organizations, setOrganizations] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -124,6 +125,12 @@ export const OrgEventsReports = ({ navigationIntent, clearNavigationIntent }) =>
   }, [activeTab]);
 
   useEffect(() => {
+    if (!canManageEvents && activeTab !== 'events') {
+      setActiveTab('events');
+    }
+  }, [activeTab, canManageEvents]);
+
+  useEffect(() => {
     if (navigationIntent?.tab !== 'reports') {
       return;
     }
@@ -147,14 +154,10 @@ export const OrgEventsReports = ({ navigationIntent, clearNavigationIntent }) =>
       setLoading(true);
       const params = new URLSearchParams({ report_type: 'event' });
       if (filterOrg) params.append('organization', filterOrg);
-
-      const response = await fetch(`${API_URL}/api/reports?${params.toString()}`);
-      const data = await response.json();
-      if (data.success) {
-        setReports(data.data);
-      }
+      const response = await apiRequest(`/api/reports?${params.toString()}`);
+      setReports(response.data || []);
     } catch (error) {
-      console.error('Error fetching reports:', error);
+      showError('Unable to load events', error.message);
     } finally {
       setLoading(false);
     }
@@ -163,25 +166,24 @@ export const OrgEventsReports = ({ navigationIntent, clearNavigationIntent }) =>
   const fetchOrganizations = async () => {
     try {
       setOrgLoading(true);
-      const response = await fetch(`${API_URL}/api/organizations`);
-      const data = await response.json();
-      if (data.success) {
-        setOrganizations(data.data);
-      }
+      const response = await apiRequest('/api/organizations');
+      setOrganizations(response.data || []);
     } catch (error) {
-      console.error('Error fetching organizations:', error);
+      showError('Unable to load organizations', error.message);
     } finally {
       setOrgLoading(false);
     }
   };
 
   const openAddEventModal = () => {
+    if (!canManageEvents) return;
     setEditingEventId(null);
     setEventFormData(emptyEventForm);
     setShowEventModal(true);
   };
 
   const openEditEventModal = (event) => {
+    if (!canManageEvents) return;
     setEditingEventId(event.id);
     setSelectedEvent(event);
     setEventFormData({
@@ -208,6 +210,10 @@ export const OrgEventsReports = ({ navigationIntent, clearNavigationIntent }) =>
 
   const handleSubmitEvent = async (e) => {
     e.preventDefault();
+    if (!canManageEvents) {
+      showError('Access restricted', 'Faculty accounts can only view events.');
+      return;
+    }
 
     try {
       const data = await apiRequest(`/api/reports${editingEventId ? `/${editingEventId}` : ''}`, {
@@ -228,6 +234,10 @@ export const OrgEventsReports = ({ navigationIntent, clearNavigationIntent }) =>
 
   const handleAddOrganization = async (e) => {
     e.preventDefault();
+    if (!canManageEvents) {
+      showError('Access restricted', 'Faculty accounts can only view organizations.');
+      return;
+    }
 
     try {
       await apiRequest('/api/organizations', {
@@ -245,6 +255,10 @@ export const OrgEventsReports = ({ navigationIntent, clearNavigationIntent }) =>
   };
 
   const handleDeleteReport = async () => {
+    if (!canManageEvents) {
+      showError('Access restricted', 'Faculty accounts can only view events.');
+      return;
+    }
     if (!selectedEvent?.id) return;
     const approved = await confirm({
       title: 'Delete event?',
@@ -294,7 +308,7 @@ export const OrgEventsReports = ({ navigationIntent, clearNavigationIntent }) =>
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Events</h2>
           <p className="text-sm text-gray-500">Manage campus events and supporting student organizations.</p>
         </div>
-        {activeTab === 'events' ? (
+        {canManageEvents && activeTab === 'events' ? (
           <button
             onClick={openAddEventModal}
             className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-colors"
@@ -302,7 +316,7 @@ export const OrgEventsReports = ({ navigationIntent, clearNavigationIntent }) =>
             <Plus size={16} />
             Add Event
           </button>
-        ) : (
+        ) : canManageEvents ? (
           <button
             onClick={() => setShowAddOrgModal(true)}
             className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-colors"
@@ -310,7 +324,7 @@ export const OrgEventsReports = ({ navigationIntent, clearNavigationIntent }) =>
             <Plus size={16} />
             Add Organization
           </button>
-        )}
+        ) : null}
       </div>
 
       <div className="flex gap-2 border-b border-gray-200">
@@ -328,20 +342,22 @@ export const OrgEventsReports = ({ navigationIntent, clearNavigationIntent }) =>
             Events
           </div>
         </button>
-        <button
-          onClick={() => setActiveTab('organizations')}
-          className={cn(
-            'px-6 py-3 text-sm font-bold transition-colors border-b-2',
-            activeTab === 'organizations'
-              ? 'text-orange-600 border-orange-600'
-              : 'text-gray-500 border-transparent hover:text-gray-700',
-          )}
-        >
-          <div className="flex items-center gap-2">
-            <Building2 size={16} />
-            Organizations
-          </div>
-        </button>
+        {canManageEvents ? (
+          <button
+            onClick={() => setActiveTab('organizations')}
+            className={cn(
+              'px-6 py-3 text-sm font-bold transition-colors border-b-2',
+              activeTab === 'organizations'
+                ? 'text-orange-600 border-orange-600'
+                : 'text-gray-500 border-transparent hover:text-gray-700',
+            )}
+          >
+            <div className="flex items-center gap-2">
+              <Building2 size={16} />
+              Organizations
+            </div>
+          </button>
+        ) : null}
       </div>
 
       {activeTab === 'events' && (
@@ -574,22 +590,24 @@ export const OrgEventsReports = ({ navigationIntent, clearNavigationIntent }) =>
                 <p className="text-sm font-bold text-gray-900">{selectedEvent.category || 'General'}</p>
               </div>
 
-              <div className="flex gap-3 pt-4 border-t border-gray-100">
-                <button
-                  onClick={() => openEditEventModal(selectedEvent)}
-                  className="flex-1 bg-gray-900 hover:bg-gray-800 text-white px-4 py-3 rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-2"
-                >
-                  <Edit size={16} />
-                  Edit Event
-                </button>
-                <button
-                  onClick={handleDeleteReport}
-                  className="flex-1 bg-red-600 hover:bg-red-700 text-white px-4 py-3 rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-2"
-                >
-                  <Trash2 size={16} />
-                  Delete Event
-                </button>
-              </div>
+              {canManageEvents ? (
+                <div className="flex gap-3 pt-4 border-t border-gray-100">
+                  <button
+                    onClick={() => openEditEventModal(selectedEvent)}
+                    className="flex-1 bg-gray-900 hover:bg-gray-800 text-white px-4 py-3 rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Edit size={16} />
+                    Edit Event
+                  </button>
+                  <button
+                    onClick={handleDeleteReport}
+                    className="flex-1 bg-red-600 hover:bg-red-700 text-white px-4 py-3 rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Trash2 size={16} />
+                    Delete Event
+                  </button>
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
@@ -648,7 +666,7 @@ export const OrgEventsReports = ({ navigationIntent, clearNavigationIntent }) =>
         </div>
       )}
 
-      {showEventModal && (
+      {showEventModal && canManageEvents && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={closeEventModal}>
           <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="p-6 border-b border-gray-200 flex items-center justify-between">
@@ -798,7 +816,7 @@ export const OrgEventsReports = ({ navigationIntent, clearNavigationIntent }) =>
         </div>
       )}
 
-      {showAddOrgModal && (
+      {showAddOrgModal && canManageEvents && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowAddOrgModal(false)}>
           <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="p-6 border-b border-gray-200 flex items-center justify-between">

@@ -20,6 +20,10 @@ export function StudentListRow({ student, onView, onEdit }) {
       </td>
       <td className="px-6 py-4 text-sm font-medium text-slate-600">{student.student_id}</td>
       <td className="px-6 py-4 text-sm text-slate-600">{student.course}</td>
+      <td className="px-6 py-4 text-sm text-slate-600">
+        {student.year_level}
+        {student.section ? <span className="ml-1 text-xs text-slate-400">({student.section})</span> : null}
+      </td>
       <td className="px-6 py-4 text-sm text-slate-600">{student.year_level}</td>
       <td className="px-6 py-4">
         <div className="flex flex-wrap gap-2">

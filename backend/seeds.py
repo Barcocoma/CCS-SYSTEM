@@ -42,6 +42,7 @@ def seed_users() -> None:
         {'email': 'chair@example.com', 'username': 'chair', 'role': 'CHAIR'},
         {'email': 'faculty@example.com', 'username': 'faculty', 'role': 'FACULTY'},
         {'email': 'secretary@example.com', 'username': 'secretary', 'role': 'SECRETARY'},
+        {'email': 'ana.reyes@student.ccs.local', 'username': 'student_ana', 'role': 'STUDENT'},
     ]
 
     for account in demo_accounts:
@@ -67,6 +68,7 @@ def seed_faculty() -> list[Faculty]:
             'first_name': 'Elena',
             'last_name': 'Ramos',
             'middle_name': 'S.',
+            'birthday': '1988-04-23',
             'email': 'elena.ramos@ccs.local',
             'contact_number': '09171234567',
             'department': 'BSIT',
@@ -78,6 +80,7 @@ def seed_faculty() -> list[Faculty]:
             'first_name': 'Marco',
             'last_name': 'Villanueva',
             'middle_name': 'D.',
+            'birthday': '1990-11-09',
             'email': 'marco.villanueva@ccs.local',
             'contact_number': '09179876543',
             'department': 'BSCS',
@@ -105,10 +108,12 @@ def seed_students() -> list[Student]:
             'first_name': 'Ana',
             'last_name': 'Reyes',
             'middle_name': 'M.',
+            'birthday': '2005-02-15',
             'email': 'ana.reyes@student.ccs.local',
             'contact_number': '09170000001',
             'course': 'BSIT',
             'year_level': '2nd Year',
+            'section': 'A',
             'enrollment_status': 'Enrolled',
         },
         {
@@ -116,10 +121,12 @@ def seed_students() -> list[Student]:
             'first_name': 'Miguel',
             'last_name': 'Santos',
             'middle_name': 'P.',
+            'birthday': '2004-07-28',
             'email': 'miguel.santos@student.ccs.local',
             'contact_number': '09170000002',
             'course': 'BSCS',
             'year_level': '3rd Year',
+            'section': 'B',
             'enrollment_status': 'Enrolled',
         },
         {
@@ -127,10 +134,12 @@ def seed_students() -> list[Student]:
             'first_name': 'Bianca',
             'last_name': 'Cruz',
             'middle_name': 'L.',
+            'birthday': '2006-01-05',
             'email': 'bianca.cruz@student.ccs.local',
             'contact_number': '09170000003',
             'course': 'BSIS',
             'year_level': '1st Year',
+            'section': 'C',
             'enrollment_status': 'Enrolled',
         },
     ]

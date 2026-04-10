@@ -4,13 +4,36 @@ from flask import Blueprint, jsonify, request
 
 from audit import log_audit_event
 from authz import require_roles
-from models import Schedule, db
+from models import Schedule, Student, db
 
 schedules_bp = Blueprint('schedules', __name__, url_prefix='/api/schedules')
 
 
 def parse_meridiem_time(value):
     return datetime.strptime(value, '%I:%M %p')
+
+
+def normalize_section(value):
+    return (value or '').strip().upper()
+
+
+def count_matching_students(course, year_level=None, section=None, tenant_id=None):
+    query = Student.query.filter(Student.course == course)
+
+    if tenant_id:
+        query = query.filter(Student.tenant_id == tenant_id)
+
+    if year_level:
+        query = query.filter(Student.year_level == year_level)
+
+    matched_students = query.all()
+    normalized_section = normalize_section(section)
+    if normalized_section:
+        matched_students = [
+            student for student in matched_students if normalize_section(student.section) == normalized_section
+        ]
+
+    return len(matched_students)
 
 
 def validate_schedule_payload(data):
@@ -55,6 +78,7 @@ def get_schedules():
 
 
 @schedules_bp.route('', methods=['POST'])
+@require_roles(['DEAN', 'CHAIR', 'SECRETARY'])
 def create_schedule():
     """Create a new schedule."""
     try:
@@ -63,18 +87,29 @@ def create_schedule():
         if validation_error:
             return jsonify({'success': False, 'message': validation_error}), 400
 
+        course = data['course'].strip()
+        year_level = (data.get('year_level') or '').strip() or None
+        section = (data.get('section') or '').strip() or None
+        tenant_id = (data.get('tenant_id') or '').strip() or None
+        enrolled_students = count_matching_students(
+            course=course,
+            year_level=year_level,
+            section=section,
+            tenant_id=tenant_id,
+        )
+
         schedule = Schedule(
-            course=data['course'].strip(),
+            course=course,
             subject=data['subject'].strip(),
             instructor=data['instructor'].strip(),
             room=data['room'].strip(),
             day=data['day'].strip(),
             start_time=data['start_time'].strip(),
             end_time=data['end_time'].strip(),
-            students=data.get('students', 0),
-            year_level=(data.get('year_level') or '').strip() or None,
-            section=(data.get('section') or '').strip() or None,
-            tenant_id=(data.get('tenant_id') or '').strip() or None,
+            students=enrolled_students,
+            year_level=year_level,
+            section=section,
+            tenant_id=tenant_id,
         )
 
         db.session.add(schedule)
@@ -113,6 +148,7 @@ def get_schedule(schedule_id):
 
 
 @schedules_bp.route('/<int:schedule_id>', methods=['PUT'])
+@require_roles(['DEAN', 'CHAIR', 'SECRETARY'])
 def update_schedule(schedule_id):
     """Update a schedule."""
     try:
@@ -134,16 +170,26 @@ def update_schedule(schedule_id):
         if validation_error:
             return jsonify({'success': False, 'message': validation_error}), 400
 
-        schedule.course = merged['course'].strip()
+        course = merged['course'].strip()
+        year_level = (data.get('year_level', schedule.year_level) or '').strip() or None
+        section = (data.get('section', schedule.section) or '').strip() or None
+        enrolled_students = count_matching_students(
+            course=course,
+            year_level=year_level,
+            section=section,
+            tenant_id=schedule.tenant_id,
+        )
+
+        schedule.course = course
         schedule.subject = merged['subject'].strip()
         schedule.instructor = merged['instructor'].strip()
         schedule.room = merged['room'].strip()
         schedule.day = merged['day'].strip()
         schedule.start_time = merged['start_time'].strip()
         schedule.end_time = merged['end_time'].strip()
-        schedule.students = data.get('students', schedule.students)
-        schedule.year_level = (data.get('year_level', schedule.year_level) or '').strip() or None
-        schedule.section = (data.get('section', schedule.section) or '').strip() or None
+        schedule.students = enrolled_students
+        schedule.year_level = year_level
+        schedule.section = section
         schedule.updated_at = datetime.utcnow()
 
         db.session.commit()

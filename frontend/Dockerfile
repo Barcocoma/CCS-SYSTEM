@@ -18,6 +18,9 @@ ENV VITE_API_URL=$VITE_API_URL
 # Build the application
 RUN npm run build
 
+# Generate version file for auto-update detection
+RUN echo "{\"timestamp\": $(date +%s), \"version\": \"$(date +%Y%m%d-%H%M%S)\"}" > ./dist/version.json
+
 # Stage 2: Serve the application with nginx
 FROM nginx:alpine
 
@@ -25,15 +28,7 @@ FROM nginx:alpine
 COPY --from=builder /app/dist /usr/share/nginx/html
 
 # Copy nginx configuration
-RUN echo 'server { \
-    listen 80; \
-    server_name localhost; \
-    root /usr/share/nginx/html; \
-    index index.html; \
-    location / { \
-        try_files $uri $uri/ /index.html; \
-    } \
-}' > /etc/nginx/conf.d/default.conf
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
 

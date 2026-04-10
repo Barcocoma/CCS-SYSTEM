@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { 
   Calendar, 
   Clock, 
@@ -18,9 +18,9 @@ import {
 import { cn } from '../../constants';
 import { ScheduleForm } from './ScheduleForm';
 import { useUI } from '../ui/UIProvider';
+import { useSession } from '../../context/SessionProvider';
 import { apiRequest } from '../../lib/api';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+import { matchesFacultyAssignment } from '../../lib/display';
 
 const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const timeSlots = [
@@ -447,6 +447,7 @@ const extractRowsFromPlainText = (text) => {
 };
 
 export const Scheduling = ({ navigationIntent, clearNavigationIntent, onNavigate }) => {
+  const { user, accessRole } = useSession();
   const { showError, showSuccess, confirm } = useUI();
   const [schedules, setSchedules] = useState([]);
   const [faculty, setFaculty] = useState([]);
@@ -477,7 +478,6 @@ export const Scheduling = ({ navigationIntent, clearNavigationIntent, onNavigate
     day: 'Monday',
     start_time: '7:00 AM',
     end_time: '9:00 AM',
-    students: 0,
     year_level: '1st Year',
     section: ''
   });
@@ -511,13 +511,10 @@ export const Scheduling = ({ navigationIntent, clearNavigationIntent, onNavigate
   const fetchFaculty = async () => {
     try {
       setFacultyLoading(true);
-      const response = await fetch(`${API_URL}/api/faculty`);
-      const data = await response.json();
-      if (data.success) {
-        setFaculty(data.data);
-      }
+      const response = await apiRequest('/api/faculty');
+      setFaculty(response.data || []);
     } catch (error) {
-      console.error('Error fetching faculty:', error);
+      showError('Unable to load faculty directory', error.message);
     } finally {
       setFacultyLoading(false);
     }
@@ -540,29 +537,61 @@ export const Scheduling = ({ navigationIntent, clearNavigationIntent, onNavigate
       const params = new URLSearchParams();
       if (selectedCourse !== 'All Courses') params.append('course', selectedCourse);
       if (selectedDay !== 'All Days') params.append('day', selectedDay);
-      
-      const response = await fetch(`${API_URL}/api/schedules?${params}`);
-      const data = await response.json();
-      if (data.success) {
-        setSchedules(data.data);
-      }
+
+      const query = params.toString();
+      const response = await apiRequest(`/api/schedules${query ? `?${query}` : ''}`);
+      setSchedules(response.data || []);
     } catch (error) {
-      console.error('Error fetching schedules:', error);
+      showError('Unable to load schedules', error.message);
     } finally {
       setLoading(false);
     }
   };
 
+  const facultyLoginTokens = useMemo(
+    () => [user?.email, user?.username].map((value) => sanitizeValue(value).toLowerCase()).filter(Boolean),
+    [user?.email, user?.username],
+  );
+
+  const matchedFacultyProfile = useMemo(
+    () =>
+      faculty.find((item) => {
+        const email = sanitizeValue(item.email).toLowerCase();
+        const employeeNumber = sanitizeValue(item.employee_number).toLowerCase();
+        return facultyLoginTokens.some((token) => token === email || token === employeeNumber);
+      }) || null,
+    [faculty, facultyLoginTokens],
+  );
+
+  const normalizedFacultyPosition = sanitizeValue(matchedFacultyProfile?.position).toLowerCase();
+  const hasChairPosition = ['department chair', 'dept chair', 'chair', 'chairperson'].includes(normalizedFacultyPosition);
+  const isFacultyUser = accessRole === 'FACULTY' && !hasChairPosition;
+  const canManageSchedules = !isFacultyUser;
+  const facultyProfile = isFacultyUser ? matchedFacultyProfile : null;
+
+  const scopedSchedules = useMemo(() => {
+    if (!isFacultyUser) {
+      return schedules;
+    }
+    if (!facultyProfile) {
+      return [];
+    }
+    return schedules.filter((schedule) => matchesFacultyAssignment(schedule, facultyProfile));
+  }, [facultyProfile, isFacultyUser, schedules]);
+
   const handleAddSchedule = async (e) => {
     e.preventDefault();
+    if (!canManageSchedules) {
+      showError('Access restricted', 'Faculty accounts can only view assigned schedules.');
+      return;
+    }
+
     try {
-      const response = await fetch(`${API_URL}/api/schedules`, {
+      const response = await apiRequest('/api/schedules', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: formData,
       });
-      const data = await response.json();
-      if (data.success) {
+      if (response.success) {
         setShowAddModal(false);
         setFormData({
           course: 'BSIT',
@@ -572,14 +601,11 @@ export const Scheduling = ({ navigationIntent, clearNavigationIntent, onNavigate
           day: 'Monday',
           start_time: '7:00 AM',
           end_time: '9:00 AM',
-          students: 0,
           year_level: '1st Year',
           section: ''
         });
         fetchSchedules();
         showSuccess('Schedule added', 'The new schedule is now part of the weekly grid.');
-      } else {
-        showError('Unable to add schedule', data.message);
       }
     } catch (error) {
       showError('Unable to add schedule', error.message);
@@ -588,20 +614,25 @@ export const Scheduling = ({ navigationIntent, clearNavigationIntent, onNavigate
 
   const handleEditSchedule = async (e) => {
     e.preventDefault();
+    if (!canManageSchedules) {
+      showError('Access restricted', 'Faculty accounts can only view assigned schedules.');
+      return;
+    }
+    if (!selectedSchedule) {
+      showError('Unable to update schedule', 'No schedule selected.');
+      return;
+    }
+
     try {
-      const response = await fetch(`${API_URL}/api/schedules/${selectedSchedule.id}`, {
+      const response = await apiRequest(`/api/schedules/${selectedSchedule.id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: formData,
       });
-      const data = await response.json();
-      if (data.success) {
+      if (response.success) {
         setShowEditModal(false);
         setSelectedSchedule(null);
         fetchSchedules();
         showSuccess('Schedule updated', 'The schedule changes were saved successfully.');
-      } else {
-        showError('Unable to update schedule', data.message);
       }
     } catch (error) {
       showError('Unable to update schedule', error.message);
@@ -609,6 +640,15 @@ export const Scheduling = ({ navigationIntent, clearNavigationIntent, onNavigate
   };
 
   const handleDeleteSchedule = async () => {
+    if (!canManageSchedules) {
+      showError('Access restricted', 'Faculty accounts can only view assigned schedules.');
+      return;
+    }
+    if (!selectedSchedule) {
+      showError('Unable to delete schedule', 'No schedule selected.');
+      return;
+    }
+
     const approved = await confirm({
       title: 'Delete schedule?',
       description: `This will remove the ${selectedSchedule?.subject || 'selected'} schedule.`,
@@ -618,16 +658,13 @@ export const Scheduling = ({ navigationIntent, clearNavigationIntent, onNavigate
     if (!approved) return;
     
     try {
-      const response = await fetch(`${API_URL}/api/schedules/${selectedSchedule.id}`, {
-        method: 'DELETE'
+      const response = await apiRequest(`/api/schedules/${selectedSchedule.id}`, {
+        method: 'DELETE',
       });
-      const data = await response.json();
-      if (data.success) {
+      if (response.success) {
         setSelectedSchedule(null);
         fetchSchedules();
         showSuccess('Schedule deleted', 'The schedule was removed.');
-      } else {
-        showError('Unable to delete schedule', data.message);
       }
     } catch (error) {
       showError('Unable to delete schedule', error.message);
@@ -635,6 +672,11 @@ export const Scheduling = ({ navigationIntent, clearNavigationIntent, onNavigate
   };
 
   const openEditModal = (schedule) => {
+    if (!canManageSchedules) {
+      showError('Access restricted', 'Faculty accounts can only view assigned schedules.');
+      return;
+    }
+
     setSelectedSchedule(schedule);
     setFormData({
       course: schedule.course || 'BSIT',
@@ -644,14 +686,13 @@ export const Scheduling = ({ navigationIntent, clearNavigationIntent, onNavigate
       day: schedule.day || 'Monday',
       start_time: schedule.start_time || '7:00 AM',
       end_time: schedule.end_time || '9:00 AM',
-      students: schedule.students || 0,
       year_level: schedule.year_level || '1st Year',
       section: schedule.section || ''
     });
     setShowEditModal(true);
   };
 
-  const filteredSchedules = schedules.filter(schedule => {
+  const filteredSchedules = scopedSchedules.filter(schedule => {
     const matchesSearch = schedule.subject?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          schedule.instructor?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          schedule.room?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -659,6 +700,20 @@ export const Scheduling = ({ navigationIntent, clearNavigationIntent, onNavigate
     const matchesDay = selectedDay === 'All Days' || schedule.day === selectedDay;
     return matchesSearch && matchesCourse && matchesDay;
   });
+
+  const calendarTimeSlots = useMemo(() => {
+    if (!isFacultyUser) {
+      return timeSlots;
+    }
+
+    const assignedStartTimes = new Set(
+      filteredSchedules
+        .map((schedule) => sanitizeValue(schedule.start_time))
+        .filter(Boolean),
+    );
+    const compactSlots = timeSlots.filter((slot) => assignedStartTimes.has(slot));
+    return compactSlots.length > 0 ? compactSlots : timeSlots;
+  }, [filteredSchedules, isFacultyUser]);
 
   const getValidatedExportRows = () => {
     const labeledRows = [];
@@ -864,6 +919,10 @@ export const Scheduling = ({ navigationIntent, clearNavigationIntent, onNavigate
   };
 
   const handleChooseImportType = (typeKey) => {
+    if (!canManageSchedules) {
+      showError('Access restricted', 'Faculty accounts cannot import schedules.');
+      return;
+    }
     if (isProcessingFile) return;
     pendingImportTypeRef.current = typeKey;
     setPendingImportType(typeKey);
@@ -880,6 +939,12 @@ export const Scheduling = ({ navigationIntent, clearNavigationIntent, onNavigate
   };
 
   const handleImportFileChange = async (event) => {
+    if (!canManageSchedules) {
+      event.target.value = '';
+      showError('Access restricted', 'Faculty accounts cannot import schedules.');
+      return;
+    }
+
     const selectedFile = event.target.files?.[0];
     if (!selectedFile) return;
 
@@ -969,9 +1034,18 @@ export const Scheduling = ({ navigationIntent, clearNavigationIntent, onNavigate
 
   const matchedStudents = selectedSchedule
     ? studentsList.filter(
-        (student) =>
-          student.course === selectedSchedule.course &&
-          (!selectedSchedule.year_level || student.year_level === selectedSchedule.year_level),
+        (student) => {
+          if (student.course !== selectedSchedule.course) return false;
+          if (selectedSchedule.year_level && student.year_level && student.year_level !== selectedSchedule.year_level) {
+            return false;
+          }
+          if (selectedSchedule.section) {
+            const studentSection = (student.section || '').trim().toUpperCase();
+            const scheduleSection = (selectedSchedule.section || '').trim().toUpperCase();
+            return studentSection === scheduleSection;
+          }
+          return true;
+        },
       )
     : [];
 
@@ -998,16 +1072,28 @@ export const Scheduling = ({ navigationIntent, clearNavigationIntent, onNavigate
       setSelectedCourse(context.course || 'All Courses');
     }
     if (context.scheduleId) {
-      if (schedules.length === 0) {
+      if (scopedSchedules.length === 0) {
         return;
       }
-      const record = schedules.find((item) => item.id === context.scheduleId);
+      const record = scopedSchedules.find((item) => item.id === context.scheduleId);
       if (record) {
         setSelectedSchedule(record);
       }
     }
     clearNavigationIntent?.();
-  }, [navigationIntent, clearNavigationIntent, schedules]);
+  }, [navigationIntent, clearNavigationIntent, scopedSchedules]);
+
+  useEffect(() => {
+    if (!selectedSchedule) {
+      return;
+    }
+
+    const stillVisible = scopedSchedules.some((item) => item.id === selectedSchedule.id);
+    if (!stillVisible) {
+      setSelectedSchedule(null);
+      setShowEditModal(false);
+    }
+  }, [scopedSchedules, selectedSchedule]);
 
   const fetchLinkedData = async () => {
     try {
@@ -1033,7 +1119,14 @@ export const Scheduling = ({ navigationIntent, clearNavigationIntent, onNavigate
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Class Scheduling</h2>
-          <p className="text-sm text-gray-500">Manage and view class schedules</p>
+          <p className="text-sm text-gray-500">
+            {isFacultyUser ? 'View schedules assigned to your teaching load' : 'Manage and view class schedules'}
+          </p>
+          {isFacultyUser && !facultyLoading && !facultyProfile ? (
+            <p className="mt-2 text-xs font-semibold text-amber-700">
+              This faculty account is not linked to a faculty profile yet. No schedules can be shown.
+            </p>
+          ) : null}
         </div>
         <div className="flex items-center gap-3">
           <div className="flex bg-gray-100 rounded-xl p-1">
@@ -1061,35 +1154,37 @@ export const Scheduling = ({ navigationIntent, clearNavigationIntent, onNavigate
             </button>
           </div>
           <div ref={actionMenuRef} className="flex items-center gap-2">
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setOpenActionMenu(openActionMenu === 'import' ? '' : 'import')}
-                disabled={isProcessingFile}
-                className="bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 px-3 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <Upload size={16} />
-                {importingFormat ? `Importing ${importingFormat}...` : 'Import'}
-              </button>
-              {openActionMenu === 'import' ? (
-                <div className="absolute right-0 z-20 mt-2 w-44 rounded-xl border border-gray-200 bg-white p-1 shadow-lg">
-                  {FILE_TYPE_OPTIONS.map((option) => {
-                    const Icon = option.icon;
-                    return (
-                      <button
-                        key={`import-${option.key}`}
-                        type="button"
-                        onClick={() => handleChooseImportType(option.key)}
-                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-700 hover:bg-gray-50"
-                      >
-                        <Icon size={15} />
-                        {option.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : null}
-            </div>
+            {canManageSchedules ? (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setOpenActionMenu(openActionMenu === 'import' ? '' : 'import')}
+                  disabled={isProcessingFile}
+                  className="bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 px-3 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Upload size={16} />
+                  {importingFormat ? `Importing ${importingFormat}...` : 'Import'}
+                </button>
+                {openActionMenu === 'import' ? (
+                  <div className="absolute right-0 z-20 mt-2 w-44 rounded-xl border border-gray-200 bg-white p-1 shadow-lg">
+                    {FILE_TYPE_OPTIONS.map((option) => {
+                      const Icon = option.icon;
+                      return (
+                        <button
+                          key={`import-${option.key}`}
+                          type="button"
+                          onClick={() => handleChooseImportType(option.key)}
+                          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-700 hover:bg-gray-50"
+                        >
+                          <Icon size={15} />
+                          {option.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
 
             <div className="relative">
               <button
@@ -1120,21 +1215,25 @@ export const Scheduling = ({ navigationIntent, clearNavigationIntent, onNavigate
                 </div>
               ) : null}
             </div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept={importAccept}
-              onChange={handleImportFileChange}
-              className="hidden"
-            />
+            {canManageSchedules ? (
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept={importAccept}
+                onChange={handleImportFileChange}
+                className="hidden"
+              />
+            ) : null}
           </div>
-          <button 
-            onClick={() => setShowAddModal(true)}
-            className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-colors"
-          >
-            <Plus size={18} />
-            Add Schedule
-          </button>
+          {canManageSchedules ? (
+            <button 
+              onClick={() => setShowAddModal(true)}
+              className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-colors"
+            >
+              <Plus size={18} />
+              Add Schedule
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -1185,7 +1284,9 @@ export const Scheduling = ({ navigationIntent, clearNavigationIntent, onNavigate
           <div className="p-6 border-b border-gray-100">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-bold text-gray-900">Weekly Schedule</h3>
-              <span className="text-sm font-bold text-gray-500">Current weekly grid</span>
+              <span className="text-sm font-bold text-gray-500">
+                {isFacultyUser ? 'Assigned time slots only' : 'Current weekly grid'}
+              </span>
             </div>
           </div>
           
@@ -1196,42 +1297,73 @@ export const Scheduling = ({ navigationIntent, clearNavigationIntent, onNavigate
               <table className="w-full border-collapse">
                 <thead>
                   <tr className="bg-gray-50">
-                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase tracking-wider border-r border-gray-100">Time</th>
+                    <th
+                      className={cn(
+                        'text-left text-xs font-bold text-gray-400 uppercase tracking-wider border-r border-gray-100',
+                        isFacultyUser ? 'px-3 py-2' : 'px-4 py-3',
+                      )}
+                    >
+                      Time
+                    </th>
                     {daysOfWeek.map(day => (
-                      <th key={day} className="px-4 py-3 text-center text-xs font-bold text-gray-400 uppercase tracking-wider border-r border-gray-100 last:border-r-0">
+                      <th
+                        key={day}
+                        className={cn(
+                          'text-center text-xs font-bold text-gray-400 uppercase tracking-wider border-r border-gray-100 last:border-r-0',
+                          isFacultyUser ? 'px-3 py-2' : 'px-4 py-3',
+                        )}
+                      >
                         {day}
                       </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {timeSlots.map((timeSlot, idx) => (
+                  {calendarTimeSlots.map((timeSlot, idx) => (
                     <tr key={idx} className="border-b border-gray-50">
-                      <td className="px-4 py-3 text-xs font-bold text-gray-500 border-r border-gray-100 whitespace-nowrap">
+                      <td
+                        className={cn(
+                          'text-xs font-bold text-gray-500 border-r border-gray-100 whitespace-nowrap',
+                          isFacultyUser ? 'px-3 py-2' : 'px-4 py-3',
+                        )}
+                      >
                         {timeSlot}
                       </td>
                       {daysOfWeek.map(day => {
                         const schedule = getScheduleByDayAndTime(day, timeSlot);
                         return (
-                          <td key={day} className="px-2 py-2 border-r border-gray-100 last:border-r-0">
+                          <td
+                            key={day}
+                            className={cn(
+                              'border-r border-gray-100 last:border-r-0',
+                              isFacultyUser ? 'px-1.5 py-1.5' : 'px-2 py-2',
+                            )}
+                          >
                             {schedule ? (
                               <div 
-                                className="bg-orange-50 border border-orange-200 rounded-lg p-3 cursor-pointer hover:bg-orange-100 transition-colors"
+                                className={cn(
+                                  'bg-orange-50 border border-orange-200 cursor-pointer hover:bg-orange-100 transition-colors',
+                                  isFacultyUser ? 'max-w-[220px] mx-auto rounded-md p-2' : 'rounded-lg p-3',
+                                )}
                                 onClick={() => setSelectedSchedule(schedule)}
                               >
-                                <p className="text-xs font-bold text-gray-900 mb-1">{schedule.subject}</p>
-                                <p className="text-[10px] text-gray-600 mb-1">{schedule.instructor}</p>
-                                <div className="flex items-center gap-2 text-[10px] text-gray-500">
-                                  <MapPin size={10} />
+                                <p className={cn('font-bold text-gray-900 mb-1', isFacultyUser ? 'text-[11px]' : 'text-xs')}>
+                                  {schedule.subject}
+                                </p>
+                                <p className={cn('text-gray-600 mb-1', isFacultyUser ? 'text-[9px]' : 'text-[10px]')}>
+                                  {schedule.instructor}
+                                </p>
+                                <div className={cn('flex items-center gap-2 text-gray-500', isFacultyUser ? 'text-[9px]' : 'text-[10px]')}>
+                                  <MapPin size={isFacultyUser ? 9 : 10} />
                                   <span>{schedule.room}</span>
                                 </div>
-                                <div className="flex items-center gap-2 text-[10px] text-gray-500 mt-1">
-                                  <Users size={10} />
+                                <div className={cn('flex items-center gap-2 text-gray-500 mt-1', isFacultyUser ? 'text-[9px]' : 'text-[10px]')}>
+                                  <Users size={isFacultyUser ? 9 : 10} />
                                   <span>{schedule.students || 0} students</span>
                                 </div>
                               </div>
                             ) : (
-                              <div className="h-20"></div>
+                              <div className={isFacultyUser ? 'h-12' : 'h-20'}></div>
                             )}
                           </td>
                         );
@@ -1304,15 +1436,17 @@ export const Scheduling = ({ navigationIntent, clearNavigationIntent, onNavigate
                     </div>
                   </div>
                   <div className="flex items-center gap-2 ml-4">
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openEditModal(schedule);
-                      }}
-                      className="p-2 hover:bg-gray-100 rounded-lg text-gray-400"
-                    >
-                      <Edit size={16} />
-                    </button>
+                    {canManageSchedules ? (
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEditModal(schedule);
+                        }}
+                        className="p-2 hover:bg-gray-100 rounded-lg text-gray-400"
+                      >
+                        <Edit size={16} />
+                      </button>
+                    ) : null}
                     <button 
                       onClick={(e) => {
                         e.stopPropagation();
@@ -1436,27 +1570,29 @@ export const Scheduling = ({ navigationIntent, clearNavigationIntent, onNavigate
                 </div>
               </div>
 
-              <div className="flex gap-3 pt-4 border-t border-gray-100">
-                <button 
-                  onClick={() => openEditModal(selectedSchedule)}
-                  className="flex-1 bg-orange-600 hover:bg-orange-700 text-white px-4 py-3 rounded-xl text-sm font-bold transition-colors"
-                >
-                  Edit Schedule
-                </button>
-                <button 
-                  onClick={handleDeleteSchedule}
-                  className="px-4 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-bold transition-colors"
-                >
-                  Delete Schedule
-                </button>
-              </div>
+              {canManageSchedules ? (
+                <div className="flex gap-3 pt-4 border-t border-gray-100">
+                  <button 
+                    onClick={() => openEditModal(selectedSchedule)}
+                    className="flex-1 bg-orange-600 hover:bg-orange-700 text-white px-4 py-3 rounded-xl text-sm font-bold transition-colors"
+                  >
+                    Edit Schedule
+                  </button>
+                  <button 
+                    onClick={handleDeleteSchedule}
+                    className="px-4 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-bold transition-colors"
+                  >
+                    Delete Schedule
+                  </button>
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
       )}
 
       {/* Add/Edit Modal */}
-      {showAddModal && (
+      {showAddModal && canManageSchedules && (
         <ScheduleForm 
           key="add"
           title="Add New Schedule"
@@ -1468,7 +1604,7 @@ export const Scheduling = ({ navigationIntent, clearNavigationIntent, onNavigate
         />
       )}
 
-      {showEditModal && (
+      {showEditModal && canManageSchedules && (
         <ScheduleForm 
           key="edit"
           title="Edit Schedule"

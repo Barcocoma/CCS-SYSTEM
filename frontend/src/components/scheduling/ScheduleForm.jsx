@@ -179,18 +179,10 @@ export const ScheduleForm = React.memo(({ onSubmit, onCancel, title, formData, s
                 placeholder="e.g., A"
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Number of Students</label>
-              <input
-                type="number"
-                min="0"
-                autoComplete="off"
-                className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none transition-all"
-                value={formData.students || 0}
-                onChange={(e) => handleChange('students', parseInt(e.target.value) || 0)}
-              />
-            </div>
           </div>
+          <p className="text-xs text-gray-500">
+            Student count is assigned automatically based on matching student records for this course, year level, and section.
+          </p>
           <div className="flex gap-3 pt-4">
             <button
               type="submit"

@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import {
   LayoutDashboard,
   IdCard,
@@ -11,7 +11,8 @@ import {
   Clock,
   BookOpen,
   FileText,
-  X
+  X,
+  CalendarDays
 } from 'lucide-react';
 import { cn } from '../../constants';
 import { useSession } from '../../context/SessionProvider';
@@ -19,14 +20,17 @@ import { useSession } from '../../context/SessionProvider';
 export const Sidebar = ({ activeTab, setActiveTab, onLogout, open = true, onClose }) => {
   const { user, accessRole, viewMode } = useSession();
 
+  const normalizedRole = accessRole?.trim().toUpperCase() || 'FACULTY';
+
   const roleDisplayMap = {
     DEAN: 'Dean',
     CHAIR: 'Department Chair',
     FACULTY: 'Faculty',
     SECRETARY: 'Secretary',
+    STUDENT: 'Student',
   };
 
-  const displayRole = roleDisplayMap[accessRole] || accessRole || 'Faculty';
+  const displayRole = roleDisplayMap[normalizedRole] || normalizedRole || 'Faculty';
   const displayName = user?.username || 'Presentation User';
 
   const menuItems = [
@@ -36,11 +40,12 @@ export const Sidebar = ({ activeTab, setActiveTab, onLogout, open = true, onClos
     { id: 'scheduling', label: 'Scheduling', icon: Clock, roles: ['DEAN', 'CHAIR', 'FACULTY', 'SECRETARY'] },
     { id: 'research', label: 'College Research', icon: BookOpen, roles: ['DEAN', 'CHAIR', 'FACULTY'] },
     { id: 'instructions', label: 'Instructions', icon: FileText, roles: ['DEAN', 'CHAIR', 'FACULTY', 'SECRETARY'] },
-    { id: 'reports', label: 'Events', icon: Calendar, roles: ['DEAN'] },
+    { id: 'events', label: 'Events', icon: CalendarDays, roles: ['DEAN', 'CHAIR', 'FACULTY', 'SECRETARY'] },
+    { id: 'reports', label: 'Reports', icon: Calendar, roles: ['DEAN'] },
     { id: 'audit', label: 'Audit Logs', icon: MessageSquare, roles: ['DEAN'], hasSubmenu: true },
   ];
 
-  const filteredItems = menuItems.filter((item) => item.roles.includes(accessRole || 'FACULTY'));
+  const filteredItems = menuItems.filter((item) => item.roles.some((role) => role.toUpperCase() === normalizedRole));
 
   return (
     <>
@@ -72,12 +77,8 @@ export const Sidebar = ({ activeTab, setActiveTab, onLogout, open = true, onClos
                 />
               </div>
               <div className="min-w-0">
-                <p className="text-[15px] font-extrabold leading-tight text-emerald-800">
-                  University of Cabuyao
-                </p>
-                <p className="mt-1 text-[11px] font-medium leading-snug text-gray-500">
-                  College of Computing Studies
-                </p>
+                <p className="text-[15px] font-extrabold leading-tight text-emerald-800">University of Cabuyao</p>
+                <p className="mt-1 text-[11px] font-medium leading-snug text-gray-500">College of Computing Studies</p>
                 <p className="mt-2 inline-flex rounded-full bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-orange-600 ring-1 ring-orange-100">
                   CCS System
                 </p>

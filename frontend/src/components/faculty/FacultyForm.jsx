@@ -1,6 +1,6 @@
 import React from 'react';
 import { X, Save } from 'lucide-react';
-import { CORE_COURSES, EMPLOYMENT_STATUSES } from '../../lib/formOptions';
+import { CORE_COURSES, EMPLOYMENT_STATUSES, FACULTY_POSITIONS } from '../../lib/formOptions';
 
 export const FacultyForm = React.memo(({ onSubmit, onCancel, title, formData, setFormData }) => {
   const handleChange = React.useCallback((field, value) => {
@@ -81,15 +81,30 @@ export const FacultyForm = React.memo(({ onSubmit, onCancel, title, formData, se
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Position</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Birthday *</label>
               <input
-                type="text"
+                type="date"
+                required
                 autoComplete="off"
+                className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none transition-all"
+                value={formData.birthday || ''}
+                onChange={(e) => handleChange('birthday', e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Position</label>
+              <select
                 className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none transition-all"
                 value={formData.position || ''}
                 onChange={(e) => handleChange('position', e.target.value)}
-                placeholder="e.g., Professor, Instructor"
-              />
+              >
+                <option value="">Select position</option>
+                {FACULTY_POSITIONS.map((positionOption) => (
+                  <option key={positionOption} value={positionOption}>
+                    {positionOption}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>

@@ -4,6 +4,10 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App.jsx';
 import './index.css';
 import { API_URL } from './lib/api.js';
+import { initAutoUpdate } from './lib/autoUpdate.js';
+
+// Initialize auto-update checker
+initAutoUpdate();
 
 const nativeFetch = window.fetch.bind(window);
 

@@ -61,8 +61,8 @@ export const Login = ({ onLogin, onSwitchToRegister }) => {
 
             <div>
               <input
-                type="email"
-                placeholder="Email address"
+                type="text"
+                placeholder="Email or account ID"
                 className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition-all"
                 value={email}
                 onChange={(e) => {
