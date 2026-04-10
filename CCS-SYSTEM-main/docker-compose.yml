@@ -1,0 +1,49 @@
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    container_name: itew6-frontend
+    restart: unless-stopped
+    environment:
+      - VITE_API_URL=http://localhost:5000
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    container_name: itew6-backend
+    restart: unless-stopped
+    command: /bin/sh -c "python init_db.py && python app.py"
+    environment:
+      - FLASK_ENV=development
+      - MONGO_HOST=mongodb
+      - MONGO_PORT=27017
+      - MONGO_USER=itew6_user
+      - MONGO_PASSWORD=itew6_password
+      - MONGO_DB_NAME=itew6_db
+      - MONGO_AUTH_DB=admin
+      - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
+    depends_on:
+      - mongodb
+
+  mongodb:
+    image: mongo:7
+    container_name: itew6-mongodb
+    restart: unless-stopped
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=itew6_user
+      - MONGO_INITDB_ROOT_PASSWORD=itew6_password
+      - MONGO_INITDB_DATABASE=itew6_db
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+
+volumes:
+  mongodb_data:
+
