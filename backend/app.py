@@ -6,7 +6,21 @@ from flask_cors import CORS
 
 from config import config
 from models import db
-from routes import auth, students, faculty, schedules, audit_logs, research, reports, organizations, syllabus, curriculum, lessons
+from routes import (
+    announcements,
+    audit_logs,
+    auth,
+    curriculum,
+    faculty,
+    lessons,
+    organizations,
+    reports,
+    research,
+    schedules,
+    sections,
+    students,
+    syllabus,
+)
 
 
 def create_app(config_overrides=None):
@@ -26,6 +40,8 @@ def create_app(config_overrides=None):
     app.register_blueprint(students.students_bp)
     app.register_blueprint(faculty.faculty_bp)
     app.register_blueprint(schedules.schedules_bp)
+    app.register_blueprint(sections.sections_bp)
+    app.register_blueprint(announcements.announcements_bp)
     app.register_blueprint(audit_logs.audit_logs_bp)
     app.register_blueprint(research.research_bp)
     app.register_blueprint(reports.reports_bp)

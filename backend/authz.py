@@ -5,7 +5,7 @@ from typing import Callable, Iterable
 
 from flask import current_app, jsonify, request
 
-from models import Faculty, User, or_
+from models import Faculty, Student, User, or_
 
 DEPARTMENT_CHAIR_POSITION_TOKENS = {
     "department chair",
@@ -47,6 +47,29 @@ def resolve_actor_faculty_profile(actor: User | None) -> Faculty | None:
             or_(
                 Faculty.email.ilike(token),
                 Faculty.employee_number.ilike(token),
+            )
+        ).first()
+        if profile:
+            return profile
+    return None
+
+
+def resolve_actor_student_profile(actor: User | None) -> Student | None:
+    if not actor:
+        return None
+
+    lookup_tokens = {
+        (actor.email or "").strip(),
+        (actor.username or "").strip(),
+    }
+
+    for token in lookup_tokens:
+        if not token:
+            continue
+        profile = Student.query.filter(
+            or_(
+                Student.student_id.ilike(token),
+                Student.email.ilike(token),
             )
         ).first()
         if profile:

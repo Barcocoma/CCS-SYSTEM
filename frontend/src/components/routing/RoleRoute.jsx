@@ -12,7 +12,7 @@ export function RoleRoute({ allow = [], redirectTo = '/dashboard', children }) {
     : (accessRole === 'STUDENT'
         ? '/student-portal'
         : accessRole === 'FACULTY'
-          ? '/users'
+          ? '/faculty'
           : '/dashboard');
 
   const hasAccess = allow === 'admin'

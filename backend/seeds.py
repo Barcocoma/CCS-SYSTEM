@@ -1,7 +1,9 @@
 import json
 from datetime import date
 
+from academic_logic import ensure_default_curricula, ensure_default_sections, ensure_schedule_offerings
 from models import (
+    Announcement,
     Curriculum,
     Faculty,
     Lesson,
@@ -9,6 +11,7 @@ from models import (
     Report,
     Research,
     Schedule,
+    Section,
     Student,
     StudentAcademicHistory,
     StudentAffiliation,
@@ -69,10 +72,10 @@ def seed_faculty() -> list[Faculty]:
             'last_name': 'Ramos',
             'middle_name': 'S.',
             'birthday': '1988-04-23',
-            'email': 'elena.ramos@ccs.local',
+            'email': 'chair@example.com',
             'contact_number': '09171234567',
             'department': 'BSIT',
-            'position': 'Associate Professor',
+            'position': 'Department Chair',
             'employment_status': 'Full-time',
         },
         {
@@ -81,10 +84,34 @@ def seed_faculty() -> list[Faculty]:
             'last_name': 'Villanueva',
             'middle_name': 'D.',
             'birthday': '1990-11-09',
-            'email': 'marco.villanueva@ccs.local',
+            'email': 'faculty@example.com',
             'contact_number': '09179876543',
+            'department': 'BSIT',
+            'position': 'Professor',
+            'employment_status': 'Full-time',
+        },
+        {
+            'employee_number': 'FAC-1003',
+            'first_name': 'Sofia',
+            'last_name': 'Mendoza',
+            'middle_name': 'R.',
+            'birthday': '1991-07-21',
+            'email': 'sofia.mendoza@ccs.local',
+            'contact_number': '09172224444',
             'department': 'BSCS',
-            'position': 'Instructor',
+            'position': 'Professor',
+            'employment_status': 'Full-time',
+        },
+        {
+            'employee_number': 'FAC-1004',
+            'first_name': 'Daniel',
+            'last_name': 'Cruz',
+            'middle_name': 'P.',
+            'birthday': '1989-02-18',
+            'email': 'daniel.cruz@ccs.local',
+            'contact_number': '09173335555',
+            'department': 'BSCS',
+            'position': 'Associate Professor',
             'employment_status': 'Full-time',
         },
     ]
@@ -137,7 +164,7 @@ def seed_students() -> list[Student]:
             'birthday': '2006-01-05',
             'email': 'bianca.cruz@student.ccs.local',
             'contact_number': '09170000003',
-            'course': 'BSIS',
+            'course': 'BSIT',
             'year_level': '1st Year',
             'section': 'C',
             'enrollment_status': 'Enrolled',
@@ -174,7 +201,7 @@ def seed_student_details(students: list[Student]) -> None:
         },
         '2024-0003': {
             'skills': [('Basketball', 'Beginner'), ('Documentation', 'Intermediate')],
-            'academic_history': [('2024-2025', 'BSIS', 'Freshman student record')],
+            'academic_history': [('2024-2025', 'BSIT', 'Freshman student record')],
             'activities': [('Sports', 'Intramurals Basketball', 'Participated in college intramurals')],
             'violations': [('Uniform Violation', 'Low', None, 'Resolved with guidance office')],
             'affiliations': [('CCS Student Council', 'Org', 'Volunteer')],
@@ -269,51 +296,101 @@ def seed_organizations() -> list[Organization]:
 
 
 def seed_schedules(faculty_members: list[Faculty]) -> None:
-    instructor_names = {
-        member.employee_number: ' '.join(
-            value for value in [member.first_name, member.middle_name, member.last_name] if value
-        )
-        for member in faculty_members
-    }
+    ensure_default_sections()
+    ensure_default_curricula()
+    ensure_schedule_offerings()
+    db.session.flush()
 
-    schedule_records = [
+    faculty_lookup = {member.employee_number: member for member in faculty_members}
+    default_assignments = [
+        ('BSIT', '1st Year', 'A', '1st Semester', 'CCS101', 'FAC-1001'),
+        ('BSIT', '1st Year', 'A', '1st Semester', 'CCS102', 'FAC-1002'),
+        ('BSIT', '2nd Year', 'A', '2nd Semester', 'ITEW2', 'FAC-1002'),
+        ('BSCS', '3rd Year', 'B', '1st Semester', 'CSC301', 'FAC-1003'),
+        ('BSCS', '4th Year', 'A', '1st Semester', 'CSC401', 'FAC-1004'),
+    ]
+
+    for course, year_level, section, semester, subject_code, faculty_key in default_assignments:
+        faculty_member = faculty_lookup.get(faculty_key)
+        if not faculty_member:
+            continue
+
+        schedule = Schedule.query.filter_by(
+            course=course,
+            year_level=year_level,
+            section=section,
+            semester=semester,
+            subject_code=subject_code,
+        ).first()
+        if not schedule:
+            continue
+
+        schedule.faculty_id = faculty_member.id
+        schedule.instructor = ' '.join(
+            part for part in [faculty_member.first_name, faculty_member.middle_name, faculty_member.last_name] if part
+        ).strip()
+
+
+def seed_announcements() -> None:
+    announcement_records = [
         {
             'course': 'BSIT',
-            'subject': 'Web Development',
-            'instructor': instructor_names.get('FAC-1001', 'Elena Ramos'),
-            'room': 'Lab 201',
-            'day': 'Monday',
-            'start_time': '9:00 AM',
-            'end_time': '11:00 AM',
-            'students': 35,
+            'year_level': '1st Year',
+            'section': 'A',
+            'semester': '1st Semester',
+            'subject_code': 'CCS101',
+            'title': 'Bring your lab notebook',
+            'content': 'Please bring a notebook and your updated student ID for our introduction to lab safety.',
+        },
+        {
+            'course': 'BSIT',
             'year_level': '2nd Year',
             'section': 'A',
+            'semester': '2nd Semester',
+            'subject_code': 'ITEW2',
+            'title': 'Client-side scripting project groups',
+            'content': 'Project groups will be finalized this week. Review DOM manipulation before the next meeting.',
         },
         {
             'course': 'BSCS',
-            'subject': 'Algorithms',
-            'instructor': instructor_names.get('FAC-1002', 'Marco Villanueva'),
-            'room': 'Room 302',
-            'day': 'Wednesday',
-            'start_time': '1:00 PM',
-            'end_time': '3:00 PM',
-            'students': 28,
             'year_level': '3rd Year',
             'section': 'B',
+            'semester': '1st Semester',
+            'subject_code': 'CSC301',
+            'title': 'Algorithm design consultation',
+            'content': 'Consultation slots are open on Friday afternoon for your divide-and-conquer analysis exercise.',
         },
     ]
 
-    for record in schedule_records:
+    for record in announcement_records:
+        schedule = Schedule.query.filter_by(
+            course=record['course'],
+            year_level=record['year_level'],
+            section=record['section'],
+            semester=record['semester'],
+            subject_code=record['subject_code'],
+        ).first()
+        if not schedule:
+            continue
+
         get_or_create(
-            Schedule,
+            Announcement,
             {
-                'course': record['course'],
-                'subject': record['subject'],
-                'day': record['day'],
-                'start_time': record['start_time'],
-                'section': record['section'],
+                'schedule_id': schedule.id,
+                'title': record['title'],
             },
-            {key: value for key, value in record.items() if key not in {'course', 'subject', 'day', 'start_time', 'section'}},
+            {
+                'faculty_id': schedule.faculty_id,
+                'faculty_name': schedule.instructor,
+                'course': schedule.course,
+                'year_level': schedule.year_level,
+                'section': schedule.section,
+                'semester': schedule.semester,
+                'subject_code': schedule.subject_code,
+                'subject': schedule.subject,
+                'content': record['content'],
+                'tenant_id': schedule.tenant_id,
+            },
         )
 
 
@@ -398,26 +475,26 @@ def seed_research() -> None:
 def seed_instructions() -> None:
     syllabus, _ = get_or_create(
         Syllabus,
-        {'code': 'IT 301', 'academic_year': '2025-2026'},
+        {'code': 'ITEW2', 'academic_year': '2025-2026'},
         {
             'course': 'BSIT',
-            'subject': 'Web Systems and Technologies',
-            'instructor': 'Elena Ramos',
-            'semester': '1st Semester',
+            'subject': 'Client Side Scripting',
+            'instructor': 'Marco Villanueva',
+            'semester': '2nd Semester',
             'units': 3,
-            'hours': 5,
-            'description': 'Core web systems course for second-year BSIT students.',
+            'hours': 3,
+            'description': 'Core client-side scripting course for second-year BSIT students.',
             'objectives': json.dumps(
                 [
-                    'Build responsive web interfaces.',
-                    'Connect frontend components to REST APIs.',
-                    'Apply validation and testing practices.',
+                    'Build interactive client-side web interfaces.',
+                    'Apply DOM manipulation and event handling.',
+                    'Integrate form validation and browser storage patterns.',
                 ]
             ),
             'topics': json.dumps(
                 [
-                    {'week': 1, 'topic': 'Frontend Foundations', 'hours': 3},
-                    {'week': 2, 'topic': 'REST API Integration', 'hours': 2},
+                    {'week': 1, 'topic': 'JavaScript Fundamentals', 'hours': 3},
+                    {'week': 2, 'topic': 'DOM Manipulation and Events', 'hours': 3},
                 ]
             ),
             'requirements': json.dumps(
@@ -432,80 +509,52 @@ def seed_instructions() -> None:
     )
     db.session.flush()
 
-    get_or_create(
-        Curriculum,
-        {'course': 'BSIT', 'year': '2025'},
-        {
-            'program': 'Bachelor of Science in Information Technology',
-            'total_units': 156,
-            'semesters': json.dumps(
-                [
-                    {
-                        'semester': '2nd Year - 1st Semester',
-                        'subjects': [
-                            {'code': 'IT 301', 'name': 'Web Systems and Technologies', 'units': 3},
-                            {'code': 'IT 302', 'name': 'Information Management', 'units': 3},
-                        ],
-                    },
-                    {
-                        'semester': '2nd Year - 2nd Semester',
-                        'subjects': [
-                            {'code': 'IT 303', 'name': 'Networking 1', 'units': 3},
-                            {'code': 'IT 304', 'name': 'Human Computer Interaction', 'units': 3},
-                        ],
-                    },
-                ]
-            ),
-            'status': 'Active',
-        },
-    )
-
     lesson_records = [
         {
             'syllabus_id': syllabus.id,
-            'title': 'Introduction to Component-Based UI',
+            'title': 'JavaScript syntax and browser execution',
             'week': 1,
             'duration': '3 hours',
             'type': 'Lecture',
             'materials': json.dumps(
                 [
-                    {'name': 'Slides - Components', 'type': 'PDF', 'size': '1.2 MB'},
-                    {'name': 'Starter Repository', 'type': 'ZIP', 'size': '4.8 MB'},
+                    {'name': 'Slides - JavaScript Basics', 'type': 'PDF', 'size': '1.2 MB'},
+                    {'name': 'Browser Console Exercises', 'type': 'ZIP', 'size': '2.1 MB'},
                 ]
             ),
             'activities': json.dumps(
                 [
-                    {'name': 'Component Inventory', 'dueDate': '2026-04-03', 'status': 'Pending'},
+                    {'name': 'Syntax Drill Set', 'dueDate': '2026-04-03', 'status': 'Pending'},
                 ]
             ),
             'objectives': json.dumps(
                 [
-                    'Explain component-based architecture.',
-                    'Identify reusable UI building blocks.',
+                    'Explain the JavaScript execution flow inside the browser.',
+                    'Write simple expressions, conditions, and loops.',
                 ]
             ),
             'status': 'Published',
         },
         {
             'syllabus_id': syllabus.id,
-            'title': 'Connecting React to Flask APIs',
+            'title': 'DOM manipulation and event handling',
             'week': 2,
-            'duration': '2 hours',
+            'duration': '3 hours',
             'type': 'Laboratory',
             'materials': json.dumps(
                 [
-                    {'name': 'API Checklist', 'type': 'DOCX', 'size': '420 KB'},
+                    {'name': 'DOM API Checklist', 'type': 'DOCX', 'size': '420 KB'},
                 ]
             ),
             'activities': json.dumps(
                 [
-                    {'name': 'Fetch Integration Exercise', 'dueDate': '2026-04-10', 'status': 'Pending'},
+                    {'name': 'Interactive Form Exercise', 'dueDate': '2026-04-10', 'status': 'Pending'},
                 ]
             ),
             'objectives': json.dumps(
                 [
-                    'Send CRUD requests from the frontend.',
-                    'Handle validation and error states in forms.',
+                    'Manipulate document nodes using JavaScript.',
+                    'Handle form and button events safely.',
                 ]
             ),
             'status': 'Published',
@@ -535,3 +584,4 @@ def seed_demo_data() -> None:
     seed_events()
     seed_research()
     seed_instructions()
+    seed_announcements()

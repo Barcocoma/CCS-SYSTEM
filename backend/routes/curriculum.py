@@ -1,4 +1,5 @@
 from flask import Blueprint, request, jsonify
+from academic_logic import ensure_default_curricula
 from audit import log_audit_event
 from authz import require_roles
 from models import db, Curriculum
@@ -13,6 +14,8 @@ def get_curricula():
         tenant_id = request.args.get('tenant_id')
         course = request.args.get('course')
         year = request.args.get('year')
+        if ensure_default_curricula(tenant_id=tenant_id):
+            db.session.commit()
         
         query = Curriculum.query
         
@@ -36,6 +39,7 @@ def get_curricula():
         }), 500
 
 @curriculum_bp.route('', methods=['POST'])
+@require_roles(['DEAN', 'CHAIR', 'SECRETARY'])
 def create_curriculum():
     """Create a new curriculum"""
     try:
@@ -106,6 +110,7 @@ def get_curriculum(curriculum_id):
         }), 500
 
 @curriculum_bp.route('/<int:curriculum_id>', methods=['PUT'])
+@require_roles(['DEAN', 'CHAIR', 'SECRETARY'])
 def update_curriculum(curriculum_id):
     """Update a curriculum"""
     try:

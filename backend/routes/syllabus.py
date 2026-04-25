@@ -36,6 +36,7 @@ def get_syllabi():
         }), 500
 
 @syllabus_bp.route('', methods=['POST'])
+@require_roles(['DEAN', 'CHAIR', 'SECRETARY'])
 def create_syllabus():
     """Create a new syllabus"""
     try:
@@ -113,6 +114,7 @@ def get_syllabus(syllabus_id):
         }), 500
 
 @syllabus_bp.route('/<int:syllabus_id>', methods=['PUT'])
+@require_roles(['DEAN', 'CHAIR', 'SECRETARY'])
 def update_syllabus(syllabus_id):
     """Update a syllabus"""
     try:

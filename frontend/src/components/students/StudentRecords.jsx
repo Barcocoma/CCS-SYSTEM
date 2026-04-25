@@ -45,7 +45,6 @@ const defaultStudentForm = {
   course: 'BSIT',
   year_level: '1st Year',
   section: '',
-  enrollment_status: 'Enrolled',
 };
 
 const defaultDetailForms = {
@@ -91,11 +90,10 @@ const STUDENT_EXPORT_COLUMNS = [
   { key: 'course', label: 'Course', required: true },
   { key: 'year_level', label: 'Year Level', required: true },
   { key: 'section', label: 'Section', required: false },
-  { key: 'enrollment_status', label: 'Enrollment Status', required: false },
 ];
 
 const STUDENT_REQUIRED_KEYS = STUDENT_EXPORT_COLUMNS.filter((column) => column.required).map((column) => column.key);
-const STUDENT_COLUMN_WIDTHS = [100, 105, 105, 95, 110, 180, 120, 90, 95, 70, 130];
+const STUDENT_COLUMN_WIDTHS = [100, 105, 105, 95, 110, 180, 120, 90, 95, 80];
 const STUDENT_FIELD_LIMITS = {
   student_id: 50,
   first_name: 100,
@@ -107,7 +105,6 @@ const STUDENT_FIELD_LIMITS = {
   course: 100,
   year_level: 50,
   section: 20,
-  enrollment_status: 50,
 };
 
 const FILE_TYPE_OPTIONS = [
@@ -127,11 +124,9 @@ const STUDENT_COLUMN_ALIASES = {
   course: ['course', 'program'],
   year_level: ['year level', 'yearlevel', 'year', 'level'],
   section: ['section', 'sec', 'section name'],
-  enrollment_status: ['enrollment status', 'status', 'enrollment'],
 };
 
 const YEAR_LEVEL_OPTIONS = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
-const ENROLLMENT_STATUS_OPTIONS = ['Enrolled', 'Irregular', 'On Leave', 'Graduated', 'Dropped'];
 
 const skillLevels = ['Beginner', 'Intermediate', 'Advanced', 'Competitive'];
 const violationSuggestions = [
@@ -280,12 +275,6 @@ function normalizeYearLevel(value) {
   return '';
 }
 
-function normalizeEnrollmentStatus(value) {
-  const text = sanitizeValue(value);
-  const direct = ENROLLMENT_STATUS_OPTIONS.find((status) => status.toLowerCase() === text.toLowerCase());
-  return direct || (text || 'Enrolled');
-}
-
 function normalizeBirthday(value) {
   const text = sanitizeValue(value);
   if (!text) return '';
@@ -318,9 +307,6 @@ function toStudentPayload(rawRow) {
   const section = sanitizeValue(resolveValueFromAliases(rawRow, STUDENT_COLUMN_ALIASES.section))
     .replace(/[^A-Za-z0-9-]/g, '')
     .toUpperCase();
-  const enrollmentStatus = normalizeEnrollmentStatus(
-    resolveValueFromAliases(rawRow, STUDENT_COLUMN_ALIASES.enrollment_status),
-  );
 
   return {
     student_id: clampField(studentId, STUDENT_FIELD_LIMITS.student_id),
@@ -333,7 +319,6 @@ function toStudentPayload(rawRow) {
     course: clampField(course, STUDENT_FIELD_LIMITS.course),
     year_level: clampField(yearLevel, STUDENT_FIELD_LIMITS.year_level),
     section: clampField(section, STUDENT_FIELD_LIMITS.section),
-    enrollment_status: clampField(enrollmentStatus, STUDENT_FIELD_LIMITS.enrollment_status),
   };
 }
 
@@ -605,7 +590,6 @@ function buildStudentPayload(formData) {
     course: formData.course,
     year_level: formData.year_level,
     section: (formData.section || '').trim().toUpperCase(),
-    enrollment_status: formData.enrollment_status,
   };
 }
 
@@ -676,6 +660,8 @@ export function StudentRecords({ navigationIntent, clearNavigationIntent, onNavi
   const [activityQuery, setActivityQuery] = useState('');
   const [affiliationQuery, setAffiliationQuery] = useState('');
   const [formData, setFormData] = useState(defaultStudentForm);
+  const [sectionOptions, setSectionOptions] = useState([]);
+  const [sectionLoading, setSectionLoading] = useState(false);
   const [detailForms, setDetailForms] = useState(defaultDetailForms);
   const [organizations, setOrganizations] = useState([]);
   const [schedules, setSchedules] = useState([]);
@@ -961,6 +947,47 @@ export function StudentRecords({ navigationIntent, clearNavigationIntent, onNavi
     selectedStudent?.id,
     skillQuery,
   ]);
+
+  const fetchSectionOptions = useCallback(
+    async ({ course, yearLevel, studentRecordId = null, includeSection = '' } = {}) => {
+      if (!course || !yearLevel) {
+        setSectionOptions([]);
+        return;
+      }
+
+      try {
+        setSectionLoading(true);
+        const params = new URLSearchParams({
+          course,
+          year_level: yearLevel,
+          available_only: 'true',
+        });
+        if (studentRecordId) params.append('student_record_id', String(studentRecordId));
+        if (includeSection) params.append('include_section', includeSection);
+        const response = await apiRequest(`/api/sections?${params.toString()}`);
+        setSectionOptions(response.data || []);
+      } catch (error) {
+        setSectionOptions([]);
+        showError('Unable to load section list', error.message);
+      } finally {
+        setSectionLoading(false);
+      }
+    },
+    [showError],
+  );
+
+  useEffect(() => {
+    if (!showAddModal && !showEditModal) {
+      return;
+    }
+
+    fetchSectionOptions({
+      course: formData.course,
+      yearLevel: formData.year_level,
+      studentRecordId: showEditModal ? selectedStudent?.id : null,
+      includeSection: formData.section,
+    });
+  }, [fetchSectionOptions, formData.course, formData.section, formData.year_level, selectedStudent?.id, showAddModal, showEditModal]);
 
   const quickSkillQueries = useMemo(
     () => getTopItems(scopedStudents.flatMap((student) => (student.skills || []).map((skill) => skill.skill_name))),
@@ -1388,7 +1415,6 @@ export function StudentRecords({ navigationIntent, clearNavigationIntent, onNavi
       course: isChairUser && chairDepartment ? chairDepartment : (student.course || 'BSIT'),
       year_level: student.year_level || '1st Year',
       section: student.section || '',
-      enrollment_status: student.enrollment_status || 'Enrolled',
     });
     setShowEditModal(true);
   };
@@ -1421,7 +1447,6 @@ export function StudentRecords({ navigationIntent, clearNavigationIntent, onNavi
         ? `Account ID: ${response.account.email} | Default password: ${response.account.password}`
         : 'The new student is now part of the searchable list.';
       showSuccess('Student profile added', credentialsHint);
-      showSuccess('Student profile added', 'The new student is now part of the searchable list.');
     } catch (error) {
       showError('Unable to add student', error.message);
     }
@@ -2375,7 +2400,7 @@ export function StudentRecords({ navigationIntent, clearNavigationIntent, onNavi
                       </div>
                       <div className="flex items-center gap-2">
                         <GraduationCap size={14} className="text-slate-400" />
-                        <span>{selectedStudent.enrollment_status}</span>
+                        <span>{selectedStudent.year_level || 'Year level not set'}</span>
                       </div>
                     </div>
                   </div>
@@ -2718,6 +2743,8 @@ export function StudentRecords({ navigationIntent, clearNavigationIntent, onNavi
           formData={formData}
           setFormData={setFormData}
           lockedCourse={isChairUser ? chairDepartment : ''}
+          sectionOptions={sectionOptions}
+          sectionLoading={sectionLoading}
         />
       ) : null}
 
@@ -2730,6 +2757,8 @@ export function StudentRecords({ navigationIntent, clearNavigationIntent, onNavi
           formData={formData}
           setFormData={setFormData}
           lockedCourse={isChairUser ? chairDepartment : ''}
+          sectionOptions={sectionOptions}
+          sectionLoading={sectionLoading}
         />
       ) : null}
     </div>

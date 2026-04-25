@@ -9,8 +9,15 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
+from academic_logic import ensure_default_sections, refresh_schedule_student_counts, validate_student_section_availability
 from audit import log_audit_event
-from authz import get_request_actor, require_roles, resolve_actor_department, resolve_effective_role
+from authz import (
+    get_request_actor,
+    require_roles,
+    resolve_actor_department,
+    resolve_actor_student_profile,
+    resolve_effective_role,
+)
 from models import (
     Student,
     StudentAcademicHistory,
@@ -40,35 +47,6 @@ def resolve_actor_scope():
     actor_role = resolve_effective_role(actor)
     department = resolve_actor_department(actor) if actor_role == 'CHAIR' else None
     return actor_role, department
-
-
-def resolve_actor_student_profile(actor=None):
-    actor = actor or get_request_actor()
-    if not actor:
-        return None
-
-    lookup_tokens = {
-        (actor.email or '').strip(),
-        (actor.username or '').strip(),
-    }
-
-    for token in lookup_tokens:
-        if not token:
-            continue
-
-        query = Student.query
-        if actor.tenant_id:
-            query = query.filter(Student.tenant_id == actor.tenant_id)
-
-        profile = query.filter(
-            or_(
-                Student.student_id.ilike(token),
-                Student.email.ilike(token),
-            )
-        ).first()
-        if profile:
-            return profile
-    return None
 
 
 def same_course(left, right):
@@ -113,17 +91,31 @@ def build_student_user_account(student_number, birthday, tenant_id):
 
 
 def validate_student_payload(data, is_update=False, current_student=None):
-    required_fields = ['student_id', 'first_name', 'last_name', 'birthday', 'course', 'year_level']
+    required_fields = ['student_id', 'first_name', 'last_name', 'birthday', 'course', 'year_level', 'section']
     if not is_update:
         missing = [field for field in required_fields if not (data.get(field) or '').strip()]
         if missing:
             return f"Missing required fields: {', '.join(missing)}"
 
-    student_number = (data.get('student_id') or '').strip()
+    student_number = (data.get('student_id') or (current_student.student_id if current_student else '')).strip()
     if student_number:
         existing = Student.query.filter_by(student_id=student_number).first()
         if existing and (not current_student or existing.id != current_student.id):
             return 'Student ID already exists'
+
+    course = (data.get('course') or (current_student.course if current_student else '')).strip()
+    year_level = (data.get('year_level') or (current_student.year_level if current_student else '')).strip()
+    section = (data.get('section') or (current_student.section if current_student else '')).strip()
+    tenant_id = (data.get('tenant_id') or (current_student.tenant_id if current_student else '') or '').strip() or None
+    section_error = validate_student_section_availability(
+        course=course,
+        year_level=year_level,
+        section=section,
+        tenant_id=tenant_id,
+        current_student_id=current_student.id if current_student else None,
+    )
+    if section_error:
+        return section_error
 
     return None
 
@@ -233,6 +225,8 @@ def create_student():
     """Create a new student."""
     data = request.get_json(silent=True) or {}
     actor_role, chair_department = resolve_actor_scope()
+    tenant_id = (data.get('tenant_id') or '').strip() or None
+    ensure_default_sections(tenant_id=tenant_id)
 
     if actor_role == 'CHAIR':
         if not chair_department:
@@ -249,7 +243,6 @@ def create_student():
     try:
         student_number = data.get('student_id', '').strip()
         birthday = parse_birthday((data.get('birthday') or '').strip())
-        tenant_id = (data.get('tenant_id') or '').strip() or None
 
         account = build_student_user_account(student_number, birthday, tenant_id)
 
@@ -263,13 +256,15 @@ def create_student():
             contact_number=(data.get('contact_number') or '').strip() or None,
             course=(data.get('course') or '').strip() or None,
             year_level=(data.get('year_level') or '').strip() or None,
-            section=(data.get('section') or '').strip() or None,
-            enrollment_status=(data.get('enrollment_status') or 'Enrolled').strip(),
+            section=(data.get('section') or '').strip().upper() or None,
+            enrollment_status='Enrolled',
             tenant_id=tenant_id,
         )
         db.session.add(account)
         db.session.add(student)
         db.session.commit()
+        if refresh_schedule_student_counts(student.course, student.year_level, student.section, tenant_id=student.tenant_id):
+            db.session.commit()
 
         log_audit_event(
             'CREATE',
@@ -332,6 +327,7 @@ def update_student(student_id):
     student = Student.query.get_or_404(student_id)
     data = request.get_json(silent=True) or {}
     actor_role, chair_department = resolve_actor_scope()
+    ensure_default_sections(tenant_id=(data.get('tenant_id') or student.tenant_id or '').strip() or None)
 
     if actor_role == 'CHAIR':
         if not chair_department:
@@ -354,6 +350,7 @@ def update_student(student_id):
         except ValueError:
             return jsonify({'success': False, 'message': 'birthday must be YYYY-MM-DD'}), 400
 
+    old_scope = (student.course, student.year_level, student.section, student.tenant_id)
     student.student_id = (data.get('student_id') or student.student_id).strip()
     student.first_name = (data.get('first_name') or student.first_name).strip()
     student.last_name = (data.get('last_name') or student.last_name).strip()
@@ -362,11 +359,22 @@ def update_student(student_id):
     student.contact_number = (data.get('contact_number') or '').strip() or None
     student.course = (data.get('course') or student.course or '').strip() or None
     student.year_level = (data.get('year_level') or student.year_level or '').strip() or None
-    student.section = (data.get('section') or student.section or '').strip() or None
-    student.enrollment_status = (data.get('enrollment_status') or student.enrollment_status or 'Enrolled').strip()
+    student.section = (data.get('section') or student.section or '').strip().upper() or None
+    student.enrollment_status = 'Enrolled'
     student.tenant_id = (data.get('tenant_id') or student.tenant_id or '').strip() or None
 
     db.session.commit()
+    scopes = {old_scope, (student.course, student.year_level, student.section, student.tenant_id)}
+    refreshed = False
+    for course_value, year_level_value, section_value, tenant_value in scopes:
+        refreshed = refresh_schedule_student_counts(
+            course_value,
+            year_level_value,
+            section_value,
+            tenant_id=tenant_value,
+        ) or refreshed
+    if refreshed:
+        db.session.commit()
     log_audit_event(
         'UPDATE',
         'STUDENT',
@@ -392,8 +400,11 @@ def delete_student(student_id):
     entity_name = f'{student.first_name} {student.last_name}'
     tenant_id = student.tenant_id
     student_number = student.student_id
+    schedule_scope = (student.course, student.year_level, student.section, student.tenant_id)
     db.session.delete(student)
     db.session.commit()
+    if refresh_schedule_student_counts(*schedule_scope[:3], tenant_id=schedule_scope[3]):
+        db.session.commit()
     log_audit_event(
         'DELETE',
         'STUDENT',

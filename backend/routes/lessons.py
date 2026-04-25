@@ -39,6 +39,7 @@ def get_lessons():
         }), 500
 
 @lessons_bp.route('', methods=['POST'])
+@require_roles(['DEAN', 'CHAIR', 'SECRETARY'])
 def create_lesson():
     """Create a new lesson"""
     try:
@@ -119,6 +120,7 @@ def get_lesson(lesson_id):
         }), 500
 
 @lessons_bp.route('/<int:lesson_id>', methods=['PUT'])
+@require_roles(['DEAN', 'CHAIR', 'SECRETARY'])
 def update_lesson(lesson_id):
     """Update a lesson"""
     try:

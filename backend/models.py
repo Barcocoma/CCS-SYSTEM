@@ -650,6 +650,40 @@ class User(BaseModel):
         }
 
 
+class Section(BaseModel):
+    """Section configuration model with seat-capacity support."""
+
+    collection_name = "sections"
+    schema = {
+        "id": None,
+        "course": None,
+        "year_level": None,
+        "name": None,
+        "capacity": 50,
+        "is_active": True,
+        "tenant_id": None,
+        "created_at": datetime.utcnow,
+        "updated_at": datetime.utcnow,
+    }
+    datetime_fields = {"created_at", "updated_at"}
+    indexes = [["course"], ["year_level"], ["name"], ["tenant_id"]]
+    unique_indexes = [["course", "year_level", "name", "tenant_id"]]
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "course": self.course,
+            "year_level": self.year_level,
+            "name": self.name,
+            "section": self.name,
+            "capacity": self.capacity,
+            "is_active": self.is_active,
+            "tenant_id": self.tenant_id,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
 class Student(BaseModel):
     """Student records model"""
 
@@ -901,8 +935,10 @@ class Schedule(BaseModel):
     schema = {
         "id": None,
         "course": None,
+        "subject_code": None,
         "subject": None,
         "instructor": None,
+        "faculty_id": None,
         "room": None,
         "day": None,
         "start_time": None,
@@ -910,19 +946,34 @@ class Schedule(BaseModel):
         "students": 0,
         "year_level": None,
         "section": None,
+        "semester": "1st Semester",
+        "units": None,
+        "curriculum_year": None,
         "tenant_id": None,
         "created_at": datetime.utcnow,
         "updated_at": datetime.utcnow,
     }
     datetime_fields = {"created_at", "updated_at"}
-    indexes = [["tenant_id"], ["course"], ["day"], ["start_time"]]
+    indexes = [
+        ["tenant_id"],
+        ["course"],
+        ["subject_code"],
+        ["day"],
+        ["start_time"],
+        ["semester"],
+        ["faculty_id"],
+        ["year_level"],
+        ["section"],
+    ]
 
     def to_dict(self):
         return {
             "id": self.id,
             "course": self.course,
+            "subject_code": self.subject_code,
             "subject": self.subject,
-            "instructor": self.instructor,
+            "instructor": self.instructor or "Unassigned",
+            "faculty_id": self.faculty_id,
             "room": self.room,
             "day": self.day,
             "time": f"{self.start_time} - {self.end_time}",
@@ -931,6 +982,53 @@ class Schedule(BaseModel):
             "students": self.students,
             "year_level": self.year_level,
             "section": self.section,
+            "semester": self.semester,
+            "units": self.units,
+            "curriculum_year": self.curriculum_year,
+            "assignment_status": "Assigned" if self.faculty_id or self.instructor else "Unassigned",
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class Announcement(BaseModel):
+    """Announcements posted per teaching assignment."""
+
+    collection_name = "announcements"
+    schema = {
+        "id": None,
+        "schedule_id": None,
+        "faculty_id": None,
+        "faculty_name": None,
+        "course": None,
+        "year_level": None,
+        "section": None,
+        "semester": None,
+        "subject_code": None,
+        "subject": None,
+        "title": None,
+        "content": None,
+        "tenant_id": None,
+        "created_at": datetime.utcnow,
+        "updated_at": datetime.utcnow,
+    }
+    datetime_fields = {"created_at", "updated_at"}
+    indexes = [["schedule_id"], ["faculty_id"], ["course"], [("created_at", DESCENDING)]]
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "schedule_id": self.schedule_id,
+            "faculty_id": self.faculty_id,
+            "faculty_name": self.faculty_name,
+            "course": self.course,
+            "year_level": self.year_level,
+            "section": self.section,
+            "semester": self.semester,
+            "subject_code": self.subject_code,
+            "subject": self.subject,
+            "title": self.title,
+            "content": self.content,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

@@ -24,7 +24,6 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 const emptyChartData = [
   { name: 'BSIT', students: 0 },
   { name: 'BSCS', students: 0 },
-  { name: 'BSIS', students: 0 },
 ];
 
 const formatEventTime = (timeValue) => {
@@ -104,7 +103,6 @@ export const Dashboard = ({ onNavigate }) => {
         setChartData([
           { name: 'BSIT', students: courseCounts.BSIT || 0 },
           { name: 'BSCS', students: courseCounts.BSCS || 0 },
-          { name: 'BSIS', students: courseCounts.BSIS || 0 },
         ]);
 
         setEvents(

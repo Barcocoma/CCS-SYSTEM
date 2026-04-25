@@ -1,7 +1,7 @@
-export const COURSES = ['BSIT', 'BSCS', 'BSIS', 'BSEMC'];
-export const CORE_COURSES = ['BSIT', 'BSCS', 'BSIS'];
+export const COURSES = ['BSIT', 'BSCS'];
+export const CORE_COURSES = ['BSIT', 'BSCS'];
 export const YEAR_LEVELS = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
-export const ENROLLMENT_STATUSES = ['Enrolled', 'Not Enrolled', 'Graduated', 'Transferred'];
+export const ENROLLMENT_STATUSES = ['Enrolled'];
 export const EMPLOYMENT_STATUSES = ['Full-time', 'Part-time', 'Contract', 'On Leave'];
 export const FACULTY_POSITIONS = ['Dean', 'Department Chair', 'Professor', 'Proctor', 'Secretary'];
 export const SEMESTERS = ['1st Semester', '2nd Semester', 'Summer'];
