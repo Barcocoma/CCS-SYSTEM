@@ -13,6 +13,7 @@ import {
 import { apiRequest } from '../../lib/api';
 import { CORE_COURSES, YEAR_LEVELS } from '../../lib/formOptions';
 import { ScheduleForm } from './ScheduleForm';
+import { WeeklyScheduleView } from './WeeklyScheduleView';
 import { useUI } from '../ui/UIProvider';
 
 const SEMESTER_OPTIONS = ['1st Semester', '2nd Semester'];
@@ -43,6 +44,7 @@ export const Scheduling = () => {
   const [selectedSemester, setSelectedSemester] = useState('1st Semester');
   const [selectedYearLevel, setSelectedYearLevel] = useState('All Year Levels');
   const [assignmentFilter, setAssignmentFilter] = useState('Unassigned');
+  const [viewMode, setViewMode] = useState('board');
   const [selectedGroupKey, setSelectedGroupKey] = useState('');
   const [selectedSchedule, setSelectedSchedule] = useState(null);
   const [facultyOptions, setFacultyOptions] = useState([]);
@@ -121,7 +123,7 @@ export const Scheduling = () => {
       };
 
       current.sections.push(schedule);
-      if (schedule.faculty_id || schedule.instructor) {
+      if (schedule.faculty_id || (schedule.instructor && schedule.instructor !== 'Unassigned')) {
         current.assignedCount += 1;
       }
       map.set(key, current);
@@ -161,6 +163,18 @@ export const Scheduling = () => {
     () =>
       [...(selectedGroup?.sections || [])].sort((left, right) => (left.section || '').localeCompare(right.section || '')),
     [selectedGroup],
+  );
+
+  const visibleSchedules = useMemo(
+    () =>
+      groupedSchedules.flatMap((group) => (
+        [...group.sections].sort((left, right) => {
+          const sectionDiff = (left.section || '').localeCompare(right.section || '');
+          if (sectionDiff !== 0) return sectionDiff;
+          return (left.subject_code || left.subject || '').localeCompare(right.subject_code || right.subject || '');
+        })
+      )),
+    [groupedSchedules],
   );
 
   const loadFacultyOptions = async (schedule) => {
@@ -220,7 +234,7 @@ export const Scheduling = () => {
   };
 
   const assignedSectionsCount = useMemo(
-    () => schedules.filter((schedule) => schedule.faculty_id || schedule.instructor).length,
+    () => schedules.filter((schedule) => schedule.faculty_id || (schedule.instructor && schedule.instructor !== 'Unassigned')).length,
     [schedules],
   );
 
@@ -326,6 +340,24 @@ export const Scheduling = () => {
             </button>
           ))}
         </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          {['board', 'week'].map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => setViewMode(mode)}
+              className={[
+                'rounded-2xl px-4 py-2 text-sm font-semibold transition-colors',
+                viewMode === mode
+                  ? 'bg-slate-900 text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-orange-50 hover:text-orange-700',
+              ].join(' ')}
+            >
+              {mode === 'board' ? 'Assignment Board' : 'Week View'}
+            </button>
+          ))}
+        </div>
       </section>
 
       {error ? (
@@ -338,135 +370,165 @@ export const Scheduling = () => {
         </section>
       ) : null}
 
-      <div className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
+      {viewMode === 'board' ? (
+        <div className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
+          <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="mb-4 flex items-center gap-2">
+              <GraduationCap className="text-orange-600" size={18} />
+              <h3 className="text-lg font-bold text-slate-900">Subject Groups</h3>
+            </div>
+
+            {loading ? (
+              <p className="text-sm text-slate-500">Loading subject offerings...</p>
+            ) : groupedSchedules.length === 0 ? (
+              <p className="text-sm text-slate-500">No subject groups matched your current filters.</p>
+            ) : (
+              <div className="space-y-3">
+                {groupedSchedules.map((group) => {
+                  const remaining = group.sections.length - group.assignedCount;
+                  return (
+                    <button
+                      key={group.key}
+                      type="button"
+                      onClick={() => setSelectedGroupKey(group.key)}
+                      className={[
+                        'w-full rounded-3xl border p-4 text-left transition-colors',
+                        selectedGroupKey === group.key
+                          ? 'border-orange-200 bg-orange-50'
+                          : 'border-slate-200 bg-slate-50 hover:border-orange-200 hover:bg-orange-50',
+                      ].join(' ')}
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-bold text-slate-900">
+                            {group.subject_code ? `${group.subject_code} - ` : ''}
+                            {group.subject}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {group.course} - {group.year_level} - {group.semester}
+                          </p>
+                        </div>
+                        <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-orange-700">
+                          {group.assignedCount}/{group.sections.length} assigned
+                        </span>
+                      </div>
+                      <p className="mt-3 text-xs text-slate-500">
+                        {remaining === 0 ? 'All sections already assigned.' : `${remaining} section(s) still need a faculty assignment.`}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="mb-4 flex items-center gap-2">
+              <CalendarClock className="text-orange-600" size={18} />
+              <h3 className="text-lg font-bold text-slate-900">
+                {selectedGroup ? `${selectedGroup.subject_code ? `${selectedGroup.subject_code} - ` : ''}${selectedGroup.subject}` : 'Section Offerings'}
+              </h3>
+            </div>
+
+            {!selectedGroup ? (
+              <p className="text-sm text-slate-500">Select a subject group first.</p>
+            ) : (
+              <div className="space-y-4">
+                {selectedGroupSections.map((schedule) => {
+                  const isAssigned = Boolean(schedule.faculty_id || (schedule.instructor && schedule.instructor !== 'Unassigned'));
+                  return (
+                    <article key={schedule.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-bold text-slate-900">
+                            Section {schedule.section} - {schedule.course} {schedule.year_level}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {schedule.day} - {schedule.time} - {schedule.room}
+                          </p>
+                        </div>
+                        <span className={[
+                          'rounded-full px-2.5 py-1 text-[11px] font-bold',
+                          isAssigned ? 'bg-emerald-100 text-emerald-700' : 'bg-orange-100 text-orange-700',
+                        ].join(' ')}>
+                          {isAssigned ? 'Assigned' : 'Needs faculty'}
+                        </span>
+                      </div>
+
+                      <div className="mt-4 grid gap-3 md:grid-cols-3">
+                        <div className="rounded-2xl bg-white p-4">
+                          <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Instructor</p>
+                          <p className="mt-2 text-sm font-bold text-slate-900">
+                            {schedule.instructor && schedule.instructor !== 'Unassigned' ? schedule.instructor : 'Unassigned'}
+                          </p>
+                        </div>
+                        <div className="rounded-2xl bg-white p-4">
+                          <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Room</p>
+                          <p className="mt-2 text-sm font-bold text-slate-900">{schedule.room}</p>
+                        </div>
+                        <div className="rounded-2xl bg-white p-4">
+                          <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Students</p>
+                          <p className="mt-2 text-sm font-bold text-slate-900">{schedule.students || 0}</p>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex flex-wrap gap-3 text-xs text-slate-500">
+                          <span className="inline-flex items-center gap-1">
+                            <Clock3 size={13} />
+                            {schedule.day} - {schedule.time}
+                          </span>
+                          <span className="inline-flex items-center gap-1">
+                            <MapPin size={13} />
+                            {schedule.room}
+                          </span>
+                          <span className="inline-flex items-center gap-1">
+                            <Users size={13} />
+                            {schedule.students || 0} student(s)
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => loadFacultyOptions(schedule)}
+                          className="rounded-2xl bg-orange-600 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-orange-700"
+                        >
+                          {isAssigned ? 'Reassign Faculty' : 'Assign Faculty'}
+                        </button>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        </div>
+      ) : (
         <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
           <div className="mb-4 flex items-center gap-2">
-            <GraduationCap className="text-orange-600" size={18} />
-            <h3 className="text-lg font-bold text-slate-900">Subject Groups</h3>
+            <CalendarClock className="text-orange-600" size={18} />
+            <h3 className="text-lg font-bold text-slate-900">Weekly Schedule View</h3>
           </div>
 
           {loading ? (
             <p className="text-sm text-slate-500">Loading subject offerings...</p>
-          ) : groupedSchedules.length === 0 ? (
-            <p className="text-sm text-slate-500">No subject groups matched your current filters.</p>
           ) : (
-            <div className="space-y-3">
-              {groupedSchedules.map((group) => {
-                const remaining = group.sections.length - group.assignedCount;
-                return (
-                  <button
-                    key={group.key}
-                    type="button"
-                    onClick={() => setSelectedGroupKey(group.key)}
-                    className={[
-                      'w-full rounded-3xl border p-4 text-left transition-colors',
-                      selectedGroupKey === group.key
-                        ? 'border-orange-200 bg-orange-50'
-                        : 'border-slate-200 bg-slate-50 hover:border-orange-200 hover:bg-orange-50',
-                    ].join(' ')}
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div>
-                        <p className="text-sm font-bold text-slate-900">
-                          {group.subject_code ? `${group.subject_code} • ` : ''}
-                          {group.subject}
-                        </p>
-                        <p className="mt-1 text-xs text-slate-500">
-                          {group.course} • {group.year_level} • {group.semester}
-                        </p>
-                      </div>
-                      <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-orange-700">
-                        {group.assignedCount}/{group.sections.length} assigned
-                      </span>
-                    </div>
-                    <p className="mt-3 text-xs text-slate-500">
-                      {remaining === 0 ? 'All sections already assigned.' : `${remaining} section(s) still need a faculty assignment.`}
-                    </p>
-                  </button>
-                );
-              })}
-            </div>
+            <WeeklyScheduleView
+              schedules={visibleSchedules}
+              emptyMessage="No schedule offerings matched your current filters."
+              selectedScheduleId={selectedSchedule?.id}
+              onSelect={loadFacultyOptions}
+              renderMeta={(schedule) => (
+                <>
+                  <p>{schedule.course} - {schedule.year_level} - Section {schedule.section}</p>
+                  <p>{schedule.semester}</p>
+                  <p>{schedule.instructor && schedule.instructor !== 'Unassigned' ? schedule.instructor : 'Professor not assigned yet'}</p>
+                </>
+              )}
+              showProfessorNote
+            />
           )}
         </section>
-
-        <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="mb-4 flex items-center gap-2">
-            <CalendarClock className="text-orange-600" size={18} />
-            <h3 className="text-lg font-bold text-slate-900">
-              {selectedGroup ? `${selectedGroup.subject_code ? `${selectedGroup.subject_code} • ` : ''}${selectedGroup.subject}` : 'Section Offerings'}
-            </h3>
-          </div>
-
-          {!selectedGroup ? (
-            <p className="text-sm text-slate-500">Select a subject group first.</p>
-          ) : (
-            <div className="space-y-4">
-              {selectedGroupSections.map((schedule) => {
-                const isAssigned = Boolean(schedule.faculty_id || schedule.instructor);
-                return (
-                  <article key={schedule.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-bold text-slate-900">
-                          Section {schedule.section} • {schedule.course} {schedule.year_level}
-                        </p>
-                        <p className="mt-1 text-xs text-slate-500">
-                          {schedule.day} • {schedule.time} • {schedule.room}
-                        </p>
-                      </div>
-                      <span className={[
-                        'rounded-full px-2.5 py-1 text-[11px] font-bold',
-                        isAssigned ? 'bg-emerald-100 text-emerald-700' : 'bg-orange-100 text-orange-700',
-                      ].join(' ')}>
-                        {isAssigned ? 'Assigned' : 'Needs faculty'}
-                      </span>
-                    </div>
-
-                    <div className="mt-4 grid gap-3 md:grid-cols-3">
-                      <div className="rounded-2xl bg-white p-4">
-                        <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Instructor</p>
-                        <p className="mt-2 text-sm font-bold text-slate-900">{schedule.instructor || 'Unassigned'}</p>
-                      </div>
-                      <div className="rounded-2xl bg-white p-4">
-                        <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Room</p>
-                        <p className="mt-2 text-sm font-bold text-slate-900">{schedule.room}</p>
-                      </div>
-                      <div className="rounded-2xl bg-white p-4">
-                        <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Students</p>
-                        <p className="mt-2 text-sm font-bold text-slate-900">{schedule.students || 0}</p>
-                      </div>
-                    </div>
-
-                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                      <div className="flex flex-wrap gap-3 text-xs text-slate-500">
-                        <span className="inline-flex items-center gap-1">
-                          <Clock3 size={13} />
-                          {schedule.day} • {schedule.time}
-                        </span>
-                        <span className="inline-flex items-center gap-1">
-                          <MapPin size={13} />
-                          {schedule.room}
-                        </span>
-                        <span className="inline-flex items-center gap-1">
-                          <Users size={13} />
-                          {schedule.students || 0} student(s)
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => loadFacultyOptions(schedule)}
-                        className="rounded-2xl bg-orange-600 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-orange-700"
-                      >
-                        {isAssigned ? 'Reassign Faculty' : 'Assign Faculty'}
-                      </button>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          )}
-        </section>
-      </div>
+      )}
 
       {selectedSchedule ? (
         <ScheduleForm

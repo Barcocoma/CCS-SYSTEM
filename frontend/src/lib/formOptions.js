@@ -5,6 +5,7 @@ export const ENROLLMENT_STATUSES = ['Enrolled'];
 export const EMPLOYMENT_STATUSES = ['Full-time', 'Part-time', 'Contract', 'On Leave'];
 export const FACULTY_POSITIONS = ['Dean', 'Department Chair', 'Professor', 'Proctor', 'Secretary'];
 export const SEMESTERS = ['1st Semester', '2nd Semester', 'Summer'];
+export const TERM_SEMESTERS = ['1st Semester', '2nd Semester'];
 export const ACTIVITY_TYPES = [
   'Competition',
   'Leadership',

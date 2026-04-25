@@ -62,6 +62,8 @@ def student_matches_schedule(student, schedule):
         return False
     if schedule.year_level and normalize_year_level(schedule.year_level) != normalize_year_level(student.year_level):
         return False
+    if getattr(student, "semester", None) and (schedule.semester or "").strip() and (schedule.semester or "").strip() != (student.semester or "").strip():
+        return False
     if schedule.section and normalize_section(schedule.section) != normalize_section(student.section):
         return False
     return True

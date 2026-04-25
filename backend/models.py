@@ -699,6 +699,7 @@ class Student(BaseModel):
         "contact_number": None,
         "course": None,
         "year_level": None,
+        "semester": "1st Semester",
         "section": None,
         "enrollment_status": "Enrolled",
         "tenant_id": None,
@@ -706,7 +707,7 @@ class Student(BaseModel):
     }
     date_fields = {"birthday"}
     datetime_fields = {"created_at"}
-    indexes = [["student_id"], ["tenant_id"], ["course"], ["year_level"], ["section"], ["last_name"], ["first_name"]]
+    indexes = [["student_id"], ["tenant_id"], ["course"], ["year_level"], ["semester"], ["section"], ["last_name"], ["first_name"]]
 
     @property
     def skills(self):
@@ -755,6 +756,7 @@ class Student(BaseModel):
             "contact_number": self.contact_number,
             "course": self.course,
             "year_level": self.year_level,
+            "semester": self.semester,
             "section": self.section,
             "enrollment_status": self.enrollment_status,
             "skills": [

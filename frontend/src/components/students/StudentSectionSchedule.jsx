@@ -92,7 +92,8 @@ export function StudentSectionSchedule() {
     allSchedules
       .filter((schedule) => (
         schedule.course === studentProfile.course &&
-        (!schedule.year_level || schedule.year_level === studentProfile.year_level)
+        (!schedule.year_level || schedule.year_level === studentProfile.year_level) &&
+        (!schedule.semester || !studentProfile.semester || schedule.semester === studentProfile.semester)
       ))
       .forEach((schedule) => {
         const normalized = normalizeSection(schedule.section);
@@ -134,6 +135,9 @@ export function StudentSectionSchedule() {
     const filtered = allSchedules.filter((schedule) => {
       if (schedule.course !== studentProfile.course) return false;
       if (schedule.year_level && studentProfile.year_level && schedule.year_level !== studentProfile.year_level) {
+        return false;
+      }
+      if (schedule.semester && studentProfile.semester && schedule.semester !== studentProfile.semester) {
         return false;
       }
 
@@ -186,6 +190,9 @@ export function StudentSectionSchedule() {
             </span>
             <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
               {studentProfile?.year_level || 'Year not set'}
+            </span>
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
+              {studentProfile?.semester || 'Semester not set'}
             </span>
             <span className="rounded-full bg-orange-100 px-3 py-1 text-xs font-bold text-orange-700">
               Section {selectedSection || 'N/A'}
@@ -250,7 +257,7 @@ export function StudentSectionSchedule() {
                   </span>
                   <span className="inline-flex items-center gap-1">
                     <GraduationCap size={13} />
-                    {schedule.instructor}
+                    {schedule.instructor && schedule.instructor !== 'Unassigned' ? schedule.instructor : 'Professor not assigned yet'}
                   </span>
                 </div>
               </article>

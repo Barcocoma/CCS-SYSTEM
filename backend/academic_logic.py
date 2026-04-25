@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime
 from typing import Any
 
@@ -12,6 +13,7 @@ from academic_defaults import (
     SECTION_CAPACITY,
     SEMESTER_OPTIONS,
     TIME_BLOCKS,
+    YEAR_LEVEL_OPTIONS,
     get_default_curriculum,
 )
 from models import Curriculum, Faculty, Schedule, Section, Student, db
@@ -30,6 +32,10 @@ def normalize_section(value: str | None) -> str:
 
 
 def normalize_year_level(value: str | None) -> str:
+    return (value or "").strip()
+
+
+def normalize_semester(value: str | None) -> str:
     return (value or "").strip()
 
 
@@ -52,17 +58,104 @@ def section_key(course: str | None, year_level: str | None, section: str | None)
 def serialize_curriculum_semesters(value: Any) -> str:
     if isinstance(value, str):
         return value
-    return json.dumps(value or [])
+    return json.dumps(normalize_curriculum_terms(value or []))
+
+
+def _extract_term_metadata(term: dict[str, Any]) -> tuple[str, str]:
+    raw_year_level = normalize_year_level(term.get("year_level"))
+    raw_semester = normalize_semester(term.get("semester"))
+    raw_term_label = normalize_year_level(term.get("term_label"))
+    combined = " ".join(part for part in [raw_year_level, raw_semester, raw_term_label] if part)
+
+    if not raw_year_level and combined:
+        for candidate in YEAR_LEVEL_OPTIONS:
+            if candidate.lower() in combined.lower():
+                raw_year_level = candidate
+                break
+        if not raw_year_level:
+            year_match = re.search(r"\b([1-4](?:st|nd|rd|th)\s+Year)\b", combined, re.IGNORECASE)
+            if year_match:
+                raw_year_level = year_match.group(1).title()
+
+    if raw_semester not in ALLOWED_SEMESTERS and combined:
+        for candidate in SEMESTER_OPTIONS:
+            if candidate.lower() in combined.lower():
+                raw_semester = candidate
+                break
+
+    return raw_year_level, raw_semester
+
+
+def normalize_curriculum_subject(subject: Any) -> dict[str, Any]:
+    if not isinstance(subject, dict):
+        return {}
+
+    prerequisites = subject.get("prerequisites") or []
+    if not isinstance(prerequisites, list):
+        prerequisites = [item.strip() for item in str(prerequisites).split(",") if item.strip()]
+
+    units = subject.get("units")
+    try:
+        units = int(units)
+    except (TypeError, ValueError):
+        units = 0
+
+    return {
+        "code": (subject.get("code") or "").strip(),
+        "name": (subject.get("name") or subject.get("subject") or "").strip(),
+        "units": units,
+        "room_preference": (subject.get("room_preference") or "CLASSROOM").strip() or "CLASSROOM",
+        "prerequisites": prerequisites,
+    }
+
+
+def normalize_curriculum_term(term: Any) -> dict[str, Any]:
+    if not isinstance(term, dict):
+        return {}
+
+    year_level, semester = _extract_term_metadata(term)
+    subjects = [
+        normalized_subject
+        for normalized_subject in (normalize_curriculum_subject(subject) for subject in (term.get("subjects") or []))
+        if normalized_subject.get("code") or normalized_subject.get("name")
+    ]
+
+    total_units = term.get("total_units")
+    try:
+        total_units = int(total_units)
+    except (TypeError, ValueError):
+        total_units = sum(subject.get("units") or 0 for subject in subjects)
+
+    return {
+        "year_level": year_level,
+        "semester": semester,
+        "term_label": (term.get("term_label") or f"{year_level} - {semester}").strip(" -"),
+        "total_units": total_units,
+        "subjects": subjects,
+    }
+
+
+def normalize_curriculum_terms(terms: Any) -> list[dict[str, Any]]:
+    if not isinstance(terms, list):
+        return []
+
+    normalized_terms = []
+    for term in terms:
+        normalized_term = normalize_curriculum_term(term)
+        if not normalized_term.get("subjects"):
+            continue
+        normalized_terms.append(normalized_term)
+    return normalized_terms
 
 
 def parse_curriculum_semesters(value: Any) -> list[dict[str, Any]]:
     if not value:
         return []
     if isinstance(value, list):
-        return value
+        return normalize_curriculum_terms(value)
     try:
         parsed = json.loads(value)
-        return parsed if isinstance(parsed, list) else []
+        return normalize_curriculum_terms(parsed if isinstance(parsed, list) else [])
     except Exception:
         return []
 

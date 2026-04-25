@@ -22,6 +22,8 @@ def student_can_access_schedule(student, schedule):
         return False
     if schedule.year_level and (schedule.year_level or "").strip() != (student.year_level or "").strip():
         return False
+    if getattr(student, "semester", None) and (schedule.semester or "").strip() and (schedule.semester or "").strip() != (student.semester or "").strip():
+        return False
     if schedule.section and (schedule.section or "").strip().upper() != (student.section or "").strip().upper():
         return False
     return True
@@ -71,6 +73,7 @@ def get_announcements():
                     for item in announcements
                     if normalize_course(item.course) == normalize_course(student.course)
                     and (not item.year_level or (item.year_level or "").strip() == (student.year_level or "").strip())
+                    and (not item.semester or (item.semester or "").strip() == (student.semester or "").strip())
                     and (not item.section or (item.section or "").strip().upper() == (student.section or "").strip().upper())
                 ]
             elif role in {"FACULTY", "CHAIR"}:

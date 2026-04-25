@@ -28,6 +28,7 @@ import {
   AFFILIATION_CATEGORIES,
   AFFILIATION_ROLES,
   CORE_COURSES,
+  TERM_SEMESTERS,
   VIOLATION_SEVERITIES,
   YEAR_LEVELS,
 } from '../../lib/formOptions';
@@ -44,6 +45,7 @@ const defaultStudentForm = {
   contact_number: '',
   course: 'BSIT',
   year_level: '1st Year',
+  semester: '1st Semester',
   section: '',
 };
 
@@ -89,11 +91,12 @@ const STUDENT_EXPORT_COLUMNS = [
   { key: 'contact_number', label: 'Contact Number', required: false },
   { key: 'course', label: 'Course', required: true },
   { key: 'year_level', label: 'Year Level', required: true },
+  { key: 'semester', label: 'Semester', required: false },
   { key: 'section', label: 'Section', required: false },
 ];
 
 const STUDENT_REQUIRED_KEYS = STUDENT_EXPORT_COLUMNS.filter((column) => column.required).map((column) => column.key);
-const STUDENT_COLUMN_WIDTHS = [100, 105, 105, 95, 110, 180, 120, 90, 95, 80];
+const STUDENT_COLUMN_WIDTHS = [100, 105, 105, 95, 110, 180, 120, 90, 95, 110, 80];
 const STUDENT_FIELD_LIMITS = {
   student_id: 50,
   first_name: 100,
@@ -104,6 +107,7 @@ const STUDENT_FIELD_LIMITS = {
   contact_number: 20,
   course: 100,
   year_level: 50,
+  semester: 50,
   section: 20,
 };
 
@@ -123,6 +127,7 @@ const STUDENT_COLUMN_ALIASES = {
   contact_number: ['contact number', 'contact', 'phone', 'mobile', 'contact no'],
   course: ['course', 'program'],
   year_level: ['year level', 'yearlevel', 'year', 'level'],
+  semester: ['semester', 'term'],
   section: ['section', 'sec', 'section name'],
 };
 
@@ -275,6 +280,15 @@ function normalizeYearLevel(value) {
   return '';
 }
 
+function normalizeSemester(value) {
+  const text = sanitizeValue(value);
+  const direct = TERM_SEMESTERS.find((semester) => semester.toLowerCase() === text.toLowerCase());
+  if (direct) return direct;
+
+  if (text.toLowerCase().includes('2nd')) return '2nd Semester';
+  return text ? '1st Semester' : '';
+}
+
 function normalizeBirthday(value) {
   const text = sanitizeValue(value);
   if (!text) return '';
@@ -304,6 +318,7 @@ function toStudentPayload(rawRow) {
   const contactNumber = normalizePhone(resolveValueFromAliases(rawRow, STUDENT_COLUMN_ALIASES.contact_number));
   const course = normalizeCourse(resolveValueFromAliases(rawRow, STUDENT_COLUMN_ALIASES.course));
   const yearLevel = normalizeYearLevel(resolveValueFromAliases(rawRow, STUDENT_COLUMN_ALIASES.year_level));
+  const semester = normalizeSemester(resolveValueFromAliases(rawRow, STUDENT_COLUMN_ALIASES.semester));
   const section = sanitizeValue(resolveValueFromAliases(rawRow, STUDENT_COLUMN_ALIASES.section))
     .replace(/[^A-Za-z0-9-]/g, '')
     .toUpperCase();
@@ -318,6 +333,7 @@ function toStudentPayload(rawRow) {
     contact_number: clampField(contactNumber, STUDENT_FIELD_LIMITS.contact_number),
     course: clampField(course, STUDENT_FIELD_LIMITS.course),
     year_level: clampField(yearLevel, STUDENT_FIELD_LIMITS.year_level),
+    semester: clampField(semester, STUDENT_FIELD_LIMITS.semester),
     section: clampField(section, STUDENT_FIELD_LIMITS.section),
   };
 }
@@ -394,6 +410,7 @@ function extractRowsFromText(text) {
       'Contact Number': phoneMatch ? phoneMatch[0] : '',
       Course: courseMatch,
       'Year Level': yearMatch[0],
+      Semester: '1st Semester',
       Section: '',
       'Enrollment Status': 'Enrolled',
     });
@@ -549,6 +566,12 @@ function studentMatchesSchedule(student, schedule) {
     }
   }
 
+  if (schedule.semester && student.semester) {
+    if (schedule.semester !== student.semester) {
+      return false;
+    }
+  }
+
   if (schedule.section && student.section) {
     return schedule.section === student.section;
   }
@@ -566,6 +589,10 @@ function studentMatchesFacultySchedule(student, schedule) {
   }
 
   if (schedule.year_level && student.year_level && schedule.year_level !== student.year_level) {
+    return false;
+  }
+
+  if (schedule.semester && student.semester && schedule.semester !== student.semester) {
     return false;
   }
 
@@ -589,6 +616,7 @@ function buildStudentPayload(formData) {
     contact_number: (formData.contact_number || '').trim(),
     course: formData.course,
     year_level: formData.year_level,
+    semester: formData.semester,
     section: (formData.section || '').trim().toUpperCase(),
   };
 }
@@ -1038,19 +1066,27 @@ export function StudentRecords({ navigationIntent, clearNavigationIntent, onNavi
       return [];
     }
 
+    const relatedCodes = new Set(selectedStudentSchedules.map((schedule) => schedule.subject_code?.toLowerCase()).filter(Boolean));
     const relatedSubjects = new Set(selectedStudentSchedules.map((schedule) => schedule.subject?.toLowerCase()).filter(Boolean));
     return syllabi.filter((syllabus) => {
       if (syllabus.course !== selectedStudent.course) {
         return false;
       }
 
-      if (relatedSubjects.size === 0) {
+      if (syllabus.semester && selectedStudent.semester && syllabus.semester !== selectedStudent.semester) {
+        return false;
+      }
+
+      if (relatedSubjects.size === 0 && relatedCodes.size === 0) {
         return true;
       }
 
       const subject = (syllabus.subject || '').toLowerCase();
       const code = (syllabus.code || '').toLowerCase();
-      return [...relatedSubjects].some((value) => subject.includes(value) || value.includes(subject) || code.includes(value));
+      return (
+        [...relatedCodes].some((value) => value === code)
+        || [...relatedSubjects].some((value) => subject.includes(value) || value.includes(subject) || code.includes(value))
+      );
     });
   }, [selectedStudent, selectedStudentSchedules, syllabi]);
 
@@ -1414,6 +1450,7 @@ export function StudentRecords({ navigationIntent, clearNavigationIntent, onNavi
       contact_number: student.contact_number || '',
       course: isChairUser && chairDepartment ? chairDepartment : (student.course || 'BSIT'),
       year_level: student.year_level || '1st Year',
+      semester: student.semester || '1st Semester',
       section: student.section || '',
     });
     setShowEditModal(true);
@@ -2389,7 +2426,7 @@ export function StudentRecords({ navigationIntent, clearNavigationIntent, onNavi
                         {selectedStudent.section ? ` - ${selectedStudent.section}` : ''}
                       </span>
                     </div>
-                    <div className="mt-3 grid gap-3 text-sm text-slate-600 md:grid-cols-3">
+                    <div className="mt-3 grid gap-3 text-sm text-slate-600 md:grid-cols-4">
                       <div className="flex items-center gap-2">
                         <Mail size={14} className="text-slate-400" />
                         <span>{selectedStudent.email || 'No email on file'}</span>
@@ -2401,6 +2438,10 @@ export function StudentRecords({ navigationIntent, clearNavigationIntent, onNavi
                       <div className="flex items-center gap-2">
                         <GraduationCap size={14} className="text-slate-400" />
                         <span>{selectedStudent.year_level || 'Year level not set'}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <GraduationCap size={14} className="text-slate-400" />
+                        <span>{selectedStudent.semester || 'Semester not set'}</span>
                       </div>
                     </div>
                   </div>
@@ -2578,7 +2619,7 @@ export function StudentRecords({ navigationIntent, clearNavigationIntent, onNavi
               </div>
 
               <div className="space-y-6">
-                <DetailSectionCard title="Assigned Schedule" subtitle="Schedules are matched by course and year level for faster advising.">
+                <DetailSectionCard title="Assigned Schedule" subtitle="Schedules are matched by course, year level, semester, and section for faster advising.">
                   {selectedStudentSchedules.length > 0 ? (
                     <div className="space-y-3">
                       {selectedStudentSchedules.map((schedule) => (
@@ -2591,13 +2632,16 @@ export function StudentRecords({ navigationIntent, clearNavigationIntent, onNavi
                           <p className="text-sm font-bold text-slate-900">{schedule.subject}</p>
                           <p className="mt-1 text-sm text-slate-500">{schedule.day} â€¢ {schedule.time}</p>
                           <p className="mt-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                            {schedule.instructor} â€¢ {schedule.room}
+                            {schedule.semester} â€¢ {schedule.room}
+                          </p>
+                          <p className="mt-2 text-xs text-slate-500">
+                            {schedule.instructor && schedule.instructor !== 'Unassigned' ? schedule.instructor : 'Professor not assigned yet'}
                           </p>
                         </button>
                       ))}
                     </div>
                   ) : (
-                    <p className="text-sm text-slate-500">No schedule currently matches this studentâ€™s course and year level.</p>
+                    <p className="text-sm text-slate-500">No schedule currently matches this studentâ€™s course, year level, semester, and section.</p>
                   )}
                 </DetailSectionCard>
 

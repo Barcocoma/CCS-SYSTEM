@@ -1,6 +1,6 @@
 import React from 'react';
 import { Save, X } from 'lucide-react';
-import { CORE_COURSES, YEAR_LEVELS } from '../../lib/formOptions';
+import { CORE_COURSES, TERM_SEMESTERS, YEAR_LEVELS } from '../../lib/formOptions';
 
 export const StudentForm = React.memo(({
   onSubmit,
@@ -22,6 +22,7 @@ export const StudentForm = React.memo(({
 
   const selectedCourse = lockedCourse || formData.course || 'BSIT';
   const selectedYearLevel = formData.year_level || '1st Year';
+  const selectedSemester = formData.semester || '1st Semester';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm" onClick={onCancel}>
@@ -130,6 +131,21 @@ export const StudentForm = React.memo(({
               >
                 {YEAR_LEVELS.map((yearLevel) => (
                   <option key={yearLevel} value={yearLevel}>{yearLevel}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">Semester *</label>
+              <select
+                required
+                autoComplete="off"
+                className="w-full rounded-xl border border-gray-300 px-4 py-2 outline-none transition-all focus:ring-2 focus:ring-orange-500"
+                value={selectedSemester}
+                onChange={(event) => handleChange('semester', event.target.value)}
+              >
+                {TERM_SEMESTERS.map((semester) => (
+                  <option key={semester} value={semester}>{semester}</option>
                 ))}
               </select>
             </div>

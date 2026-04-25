@@ -629,6 +629,38 @@ class CCSApiSmokeTests(unittest.TestCase):
         self.assertEqual(listing_response.status_code, 200)
         self.assertTrue(any(item['title'] == 'Week 1 update' for item in listing_response.get_json()['data']))
 
+    def test_student_schedule_scope_respects_semester_and_keeps_unassigned_subjects_visible(self):
+        create_response = self.client.post(
+            '/api/students',
+            json={
+                'student_id': '2026-8201',
+                'first_name': 'Mika',
+                'last_name': 'Santos',
+                'birthday': '2005-07-19',
+                'course': 'BSIT',
+                'year_level': '1st Year',
+                'semester': '1st Semester',
+                'section': 'C',
+            },
+        )
+        self.assertEqual(create_response.status_code, 201)
+
+        student_login = self.client.post(
+            '/api/auth/login',
+            json={'email': '2026-8201', 'password': '2005-07-19'},
+        )
+        self.assertEqual(student_login.status_code, 200)
+        student_actor = student_login.get_json()['user']
+        headers = {'X-Actor-Id': str(student_actor['id'])}
+
+        schedules_response = self.client.get('/api/schedules?sync=true', headers=headers)
+        self.assertEqual(schedules_response.status_code, 200)
+        student_schedules = schedules_response.get_json()['data']
+
+        self.assertEqual(len(student_schedules), 7)
+        self.assertTrue(all(item['semester'] == '1st Semester' for item in student_schedules))
+        self.assertTrue(any(item['assignment_status'] == 'Unassigned' for item in student_schedules))
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -1,9 +1,9 @@
 from flask import Blueprint, request, jsonify
-from academic_logic import ensure_default_curricula
+from academic_defaults import COURSE_OPTIONS
+from academic_logic import ensure_default_curricula, normalize_course, serialize_curriculum_semesters
 from audit import log_audit_event
 from authz import require_roles
 from models import db, Curriculum
-import json
 
 curriculum_bp = Blueprint('curriculum', __name__, url_prefix='/api/curriculum')
 
@@ -54,12 +54,19 @@ def create_curriculum():
                     'message': f'{field} is required'
                 }), 400
         
+        course = normalize_course(data.get('course'))
+        if course not in COURSE_OPTIONS:
+            return jsonify({
+                'success': False,
+                'message': 'course must be either BSIT or BSCS'
+            }), 400
+
         curriculum = Curriculum(
-            course=data['course'],
+            course=course,
             program=data['program'],
             year=data['year'],
             total_units=data['total_units'],
-            semesters=json.dumps(data['semesters']) if data.get('semesters') else '[]',
+            semesters=serialize_curriculum_semesters(data['semesters']) if data.get('semesters') else '[]',
             status=data.get('status', 'Active'),
             tenant_id=data.get('tenant_id')
         )
@@ -124,7 +131,13 @@ def update_curriculum(curriculum_id):
         data = request.get_json() or {}
         
         if 'course' in data:
-            curriculum.course = data['course']
+            course = normalize_course(data.get('course'))
+            if course not in COURSE_OPTIONS:
+                return jsonify({
+                    'success': False,
+                    'message': 'course must be either BSIT or BSCS'
+                }), 400
+            curriculum.course = course
         if 'program' in data:
             curriculum.program = data['program']
         if 'year' in data:
@@ -132,7 +145,7 @@ def update_curriculum(curriculum_id):
         if 'total_units' in data:
             curriculum.total_units = data['total_units']
         if 'semesters' in data:
-            curriculum.semesters = json.dumps(data['semesters']) if data['semesters'] else '[]'
+            curriculum.semesters = serialize_curriculum_semesters(data['semesters']) if data['semesters'] else '[]'
         if 'status' in data:
             curriculum.status = data['status']
         

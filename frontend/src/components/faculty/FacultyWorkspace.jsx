@@ -12,6 +12,7 @@ import {
 import { apiRequest } from '../../lib/api';
 import { useUI } from '../ui/UIProvider';
 import { matchesFacultyAssignment } from '../../lib/display';
+import { WeeklyScheduleView } from '../scheduling/WeeklyScheduleView';
 
 const DAY_ORDER = {
   Monday: 1,
@@ -47,6 +48,7 @@ function normalizeSection(value) {
 export function FacultyWorkspace({ facultyProfile, schedules = [], students = [] }) {
   const { showError, showSuccess, confirm } = useUI();
   const [activeTab, setActiveTab] = useState('schedule');
+  const [scheduleViewMode, setScheduleViewMode] = useState('list');
   const [announcements, setAnnouncements] = useState([]);
   const [announcementsLoading, setAnnouncementsLoading] = useState(true);
   const [selectedScheduleId, setSelectedScheduleId] = useState(null);
@@ -73,6 +75,7 @@ export function FacultyWorkspace({ facultyProfile, schedules = [], students = []
       students.forEach((student) => {
         if (student.course !== schedule.course) return;
         if (schedule.year_level && student.year_level !== schedule.year_level) return;
+        if (schedule.semester && student.semester && student.semester !== schedule.semester) return;
         if (schedule.section && normalizeSection(student.section) !== normalizeSection(schedule.section)) return;
         unique.set(student.id, student);
       });
@@ -193,7 +196,7 @@ export function FacultyWorkspace({ facultyProfile, schedules = [], students = []
               {facultyProfile.first_name} {facultyProfile.last_name}
             </h3>
             <p className="mt-2 text-sm text-slate-500">
-              {facultyProfile.position || 'Faculty'} • {facultyProfile.department || 'Department not set'}
+              {facultyProfile.position || 'Faculty'} - {facultyProfile.department || 'Department not set'}
             </p>
           </div>
 
@@ -228,58 +231,96 @@ export function FacultyWorkspace({ facultyProfile, schedules = [], students = []
 
       {activeTab === 'schedule' ? (
         <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="mb-4 flex items-center gap-2">
-            <CalendarClock className="text-orange-600" size={18} />
-            <h3 className="text-lg font-bold text-slate-900">Teaching Schedule</h3>
-          </div>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <CalendarClock className="text-orange-600" size={18} />
+              <h3 className="text-lg font-bold text-slate-900">Teaching Schedule</h3>
+            </div>
 
-          {groupedSchedule.length === 0 ? (
-            <p className="text-sm text-slate-500">No teaching load is assigned yet.</p>
-          ) : (
-            <div className="grid gap-4 xl:grid-cols-2">
-              {groupedSchedule.map(([day, items]) => (
-                <article key={day} className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-                  <div className="mb-4 flex items-center justify-between">
-                    <p className="text-sm font-bold uppercase tracking-[0.16em] text-slate-500">{day}</p>
-                    <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-orange-700">
-                      {items.length} class(es)
-                    </span>
-                  </div>
-                  <div className="space-y-3">
-                    {items.map((schedule) => (
-                      <button
-                        key={schedule.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedScheduleId(schedule.id);
-                          setActiveTab('subjects');
-                        }}
-                        className="w-full rounded-2xl bg-white p-4 text-left transition-colors hover:bg-orange-50"
-                      >
-                        <p className="text-sm font-bold text-slate-900">
-                          {schedule.subject_code ? `${schedule.subject_code} • ` : ''}
-                          {schedule.subject}
-                        </p>
-                        <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-500">
-                          <span className="inline-flex items-center gap-1">
-                            <Clock3 size={13} />
-                            {schedule.time}
-                          </span>
-                          <span className="inline-flex items-center gap-1">
-                            <MapPin size={13} />
-                            {schedule.room}
-                          </span>
-                          <span className="inline-flex items-center gap-1">
-                            <Users size={13} />
-                            {schedule.course} • {schedule.year_level} • Section {schedule.section}
-                          </span>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </article>
+            <div className="flex flex-wrap gap-2">
+              {['list', 'week'].map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setScheduleViewMode(mode)}
+                  className={[
+                    'rounded-2xl px-4 py-2 text-sm font-semibold transition-colors',
+                    scheduleViewMode === mode
+                      ? 'bg-orange-600 text-white'
+                      : 'bg-slate-100 text-slate-600 hover:bg-orange-50 hover:text-orange-700',
+                  ].join(' ')}
+                >
+                  {mode === 'list' ? 'List View' : 'Week View'}
+                </button>
               ))}
             </div>
+          </div>
+
+          {scheduleViewMode === 'list' ? (
+            groupedSchedule.length === 0 ? (
+              <p className="text-sm text-slate-500">No teaching load is assigned yet.</p>
+            ) : (
+              <div className="grid gap-4 xl:grid-cols-2">
+                {groupedSchedule.map(([day, items]) => (
+                  <article key={day} className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+                    <div className="mb-4 flex items-center justify-between">
+                      <p className="text-sm font-bold uppercase tracking-[0.16em] text-slate-500">{day}</p>
+                      <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-orange-700">
+                        {items.length} class(es)
+                      </span>
+                    </div>
+                    <div className="space-y-3">
+                      {items.map((schedule) => (
+                        <button
+                          key={schedule.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedScheduleId(schedule.id);
+                            setActiveTab('subjects');
+                          }}
+                          className="w-full rounded-2xl bg-white p-4 text-left transition-colors hover:bg-orange-50"
+                        >
+                          <p className="text-sm font-bold text-slate-900">
+                            {schedule.subject_code ? `${schedule.subject_code} - ` : ''}
+                            {schedule.subject}
+                          </p>
+                          <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-500">
+                            <span className="inline-flex items-center gap-1">
+                              <Clock3 size={13} />
+                              {schedule.time}
+                            </span>
+                            <span className="inline-flex items-center gap-1">
+                              <MapPin size={13} />
+                              {schedule.room}
+                            </span>
+                            <span className="inline-flex items-center gap-1">
+                              <Users size={13} />
+                              {schedule.course} - {schedule.year_level} - Section {schedule.section}
+                            </span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )
+          ) : (
+            <WeeklyScheduleView
+              schedules={facultySchedules}
+              emptyMessage="No teaching load is assigned yet."
+              selectedScheduleId={selectedScheduleId}
+              onSelect={(schedule) => {
+                setSelectedScheduleId(schedule.id);
+                setActiveTab('subjects');
+              }}
+              renderMeta={(schedule) => (
+                <>
+                  <p>{schedule.course} - {schedule.year_level} - Section {schedule.section}</p>
+                  <p>{schedule.semester}</p>
+                </>
+              )}
+            />
           )}
         </section>
       ) : null}
@@ -311,11 +352,11 @@ export function FacultyWorkspace({ facultyProfile, schedules = [], students = []
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div>
                         <p className="text-sm font-bold text-slate-900">
-                          {schedule.subject_code ? `${schedule.subject_code} • ` : ''}
+                          {schedule.subject_code ? `${schedule.subject_code} - ` : ''}
                           {schedule.subject}
                         </p>
                         <p className="mt-1 text-xs text-slate-500">
-                          {schedule.course} • {schedule.year_level} • Section {schedule.section}
+                          {schedule.course} - {schedule.year_level} - Section {schedule.section}
                         </p>
                       </div>
                       <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-slate-700">
@@ -323,7 +364,7 @@ export function FacultyWorkspace({ facultyProfile, schedules = [], students = []
                       </span>
                     </div>
                     <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-500">
-                      <span>{schedule.day} • {schedule.time}</span>
+                      <span>{schedule.day} - {schedule.time}</span>
                       <span>{schedule.room}</span>
                     </div>
                   </button>
@@ -346,14 +387,14 @@ export function FacultyWorkspace({ facultyProfile, schedules = [], students = []
               <>
                 <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
                   <p className="text-sm font-bold text-slate-900">
-                    {selectedSchedule.subject_code ? `${selectedSchedule.subject_code} • ` : ''}
+                    {selectedSchedule.subject_code ? `${selectedSchedule.subject_code} - ` : ''}
                     {selectedSchedule.subject}
                   </p>
                   <p className="mt-1 text-xs text-slate-500">
-                    {selectedSchedule.course} • {selectedSchedule.year_level} • Section {selectedSchedule.section}
+                    {selectedSchedule.course} - {selectedSchedule.year_level} - Section {selectedSchedule.section}
                   </p>
                   <p className="mt-2 text-xs text-slate-500">
-                    {selectedSchedule.day} • {selectedSchedule.time} • {selectedSchedule.room}
+                    {selectedSchedule.day} - {selectedSchedule.time} - {selectedSchedule.room}
                   </p>
                 </div>
 
