@@ -16,6 +16,7 @@ import {
   Users,
 } from 'lucide-react';
 import { FacultyForm } from './FacultyForm';
+import { FacultyWorkspace } from './FacultyWorkspace';
 import { ModalShell } from '../ui/ModalShell';
 import { useUI } from '../ui/UIProvider';
 import { useSession } from '../../context/SessionProvider';
@@ -500,6 +501,18 @@ export function FacultyRecords({ navigationIntent, clearNavigationIntent, onNavi
       showError('Unable to delete faculty', error.message);
     }
   };
+
+  if (isFacultySelfView) {
+    if (loading) {
+      return (
+        <div className="flex h-full items-center justify-center">
+          <p className="text-sm text-slate-500">Loading faculty workspace...</p>
+        </div>
+      );
+    }
+
+    return <FacultyWorkspace facultyProfile={facultyProfile} schedules={schedules} students={students} />;
+  }
 
   if (isFacultySelfView) {
     if (loading) {

@@ -28,12 +28,12 @@ const ROUTES = {
   student_events: { path: '/student-section-events', title: 'Events', roles: ['STUDENT'] },
 
   dashboard: { path: '/dashboard', title: 'Dashboard', roles: ['DEAN', 'CHAIR', 'SECRETARY'] },
-  students: { path: '/users', title: 'Student Profile', roles: ['DEAN', 'CHAIR', 'FACULTY', 'SECRETARY'] },
-  faculty: { path: '/faculty', title: 'Faculty Profile', roles: ['DEAN', 'CHAIR', 'SECRETARY'] },
-  scheduling: { path: '/scheduling', title: 'Scheduling', roles: ['DEAN', 'CHAIR', 'FACULTY', 'SECRETARY'] },
-  research: { path: '/research', title: 'College Research', roles: ['DEAN', 'CHAIR', 'FACULTY', 'STUDENT'] },
+  students: { path: '/users', title: 'Student Profile', roles: ['DEAN', 'CHAIR', 'SECRETARY'] },
+  faculty: { path: '/faculty', title: 'Faculty Workspace', roles: ['DEAN', 'CHAIR', 'FACULTY', 'SECRETARY'] },
+  scheduling: { path: '/scheduling', title: 'Scheduling', roles: ['DEAN', 'CHAIR', 'SECRETARY'] },
+  research: { path: '/research', title: 'College Research', roles: ['DEAN', 'CHAIR', 'SECRETARY'] },
   instructions: { path: '/instructions', title: 'Instructions', roles: ['DEAN', 'CHAIR', 'SECRETARY'] },
-  events: { path: '/events', title: 'Events', roles: ['DEAN', 'CHAIR', 'FACULTY', 'SECRETARY'] },
+  events: { path: '/events', title: 'Events', roles: ['DEAN', 'CHAIR', 'SECRETARY'] },
   reports: { path: '/reports', title: 'Reports', roles: ['DEAN'] },
   audit: { path: '/audit-logs', title: 'Audit Logs', roles: ['DEAN'] },
 };
@@ -61,7 +61,7 @@ function normalizeRole(role) {
 function getDefaultPathForRole(role) {
   const normalizedRole = normalizeRole(role);
   if (normalizedRole === 'STUDENT') return ROUTES.student_portal.path;
-  if (normalizedRole === 'FACULTY') return ROUTES.students.path;
+  if (normalizedRole === 'FACULTY') return ROUTES.faculty.path;
   return ROUTES.dashboard.path;
 }
 
@@ -213,14 +213,14 @@ function AppShell() {
             <Route path={ROUTES.student_schedule.path} element={<RoleRoute allow={['STUDENT']}><StudentSectionSchedule /></RoleRoute>} />
             <Route path={ROUTES.student_events.path} element={<RoleRoute allow={['STUDENT']}><StudentSectionEvents /></RoleRoute>} />
 
-            <Route path={ROUTES.dashboard.path} element={<Dashboard onNavigate={handleNavigate} />} />
-            <Route path={ROUTES.students.path} element={<StudentRecords onNavigate={handleNavigate} />} />
-            <Route path={`${ROUTES.students.path}/:id`} element={<StudentRecords onNavigate={handleNavigate} />} />
-            <Route path={ROUTES.faculty.path} element={<FacultyRecords onNavigate={handleNavigate} />} />
-            <Route path={ROUTES.scheduling.path} element={<Scheduling onNavigate={handleNavigate} />} />
-            <Route path={ROUTES.research.path} element={<CollegeResearch />} />
-            <Route path={ROUTES.instructions.path} element={<Instructions />} />
-            <Route path={ROUTES.events.path} element={<RoleRoute allow={['DEAN', 'CHAIR', 'FACULTY', 'SECRETARY']}><OrgEventsReports navigationIntent={navigationIntent} clearNavigationIntent={clearNavigationIntent} /></RoleRoute>} />
+            <Route path={ROUTES.dashboard.path} element={<RoleRoute allow={['DEAN', 'CHAIR', 'SECRETARY']}><Dashboard onNavigate={handleNavigate} /></RoleRoute>} />
+            <Route path={ROUTES.students.path} element={<RoleRoute allow={['DEAN', 'CHAIR', 'SECRETARY']}><StudentRecords onNavigate={handleNavigate} /></RoleRoute>} />
+            <Route path={`${ROUTES.students.path}/:id`} element={<RoleRoute allow={['DEAN', 'CHAIR', 'SECRETARY']}><StudentRecords onNavigate={handleNavigate} /></RoleRoute>} />
+            <Route path={ROUTES.faculty.path} element={<RoleRoute allow={['DEAN', 'CHAIR', 'FACULTY', 'SECRETARY']}><FacultyRecords onNavigate={handleNavigate} /></RoleRoute>} />
+            <Route path={ROUTES.scheduling.path} element={<RoleRoute allow={['DEAN', 'CHAIR', 'SECRETARY']}><Scheduling onNavigate={handleNavigate} /></RoleRoute>} />
+            <Route path={ROUTES.research.path} element={<RoleRoute allow={['DEAN', 'CHAIR', 'SECRETARY']}><CollegeResearch /></RoleRoute>} />
+            <Route path={ROUTES.instructions.path} element={<RoleRoute allow={['DEAN', 'CHAIR', 'SECRETARY']}><Instructions /></RoleRoute>} />
+            <Route path={ROUTES.events.path} element={<RoleRoute allow={['DEAN', 'CHAIR', 'SECRETARY']}><OrgEventsReports navigationIntent={navigationIntent} clearNavigationIntent={clearNavigationIntent} /></RoleRoute>} />
 
             <Route path={ROUTES.reports.path} element={<RoleRoute allow={['DEAN']}><Reports /></RoleRoute>} />
             <Route path={ROUTES.audit.path} element={<RoleRoute allow={['DEAN']}><AuditLogs /></RoleRoute>} />

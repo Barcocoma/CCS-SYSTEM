@@ -93,7 +93,7 @@ class CCSApiSmokeTests(unittest.TestCase):
                 'contact_number': '09171112222',
                 'course': 'BSIT',
                 'year_level': '4th Year',
-                'enrollment_status': 'Enrolled',
+                'section': 'A',
             },
         )
         self.assertEqual(create_response.status_code, 201)
@@ -178,11 +178,11 @@ class CCSApiSmokeTests(unittest.TestCase):
                 'contact_number': '09171112222',
                 'course': 'BSIT',
                 'year_level': '4th Year',
-                'enrollment_status': 'Graduated',
+                'section': 'A',
             },
         )
         self.assertEqual(update_response.status_code, 200)
-        self.assertEqual(update_response.get_json()['data']['enrollment_status'], 'Graduated')
+        self.assertEqual(update_response.get_json()['data']['section'], 'A')
 
         delete_response = self.client.delete(f'/api/students/{student_id}')
         self.assertEqual(delete_response.status_code, 200)
@@ -198,7 +198,7 @@ class CCSApiSmokeTests(unittest.TestCase):
                 'birthday': '2005-04-12',
                 'course': 'BSIT',
                 'year_level': '1st Year',
-                'section': 'D',
+                'section': 'B',
                 'email': 'nico.velasco@student.ccs.local',
             },
         )
@@ -213,7 +213,7 @@ class CCSApiSmokeTests(unittest.TestCase):
                 'birthday': '2005-08-22',
                 'course': 'BSIT',
                 'year_level': '1st Year',
-                'section': 'd',
+                'section': 'b',
             },
         )
         self.assertEqual(second_student.status_code, 201)
@@ -227,7 +227,7 @@ class CCSApiSmokeTests(unittest.TestCase):
                 'birthday': '2005-02-04',
                 'course': 'BSIT',
                 'year_level': '1st Year',
-                'section': 'E',
+                'section': 'C',
             },
         )
         self.assertEqual(other_section_student.status_code, 201)
@@ -315,6 +315,7 @@ class CCSApiSmokeTests(unittest.TestCase):
                 'day': 'Thursday',
                 'start_time': '2:00 PM',
                 'end_time': '1:00 PM',
+                'semester': '1st Semester',
             },
         )
         self.assertEqual(invalid_response.status_code, 400)
@@ -357,9 +358,9 @@ class CCSApiSmokeTests(unittest.TestCase):
                 'day': 'Thursday',
                 'start_time': '1:00 PM',
                 'end_time': '3:00 PM',
-                'students': 30,
                 'year_level': '3rd Year',
                 'section': 'C',
+                'semester': '1st Semester',
             },
         )
         self.assertEqual(create_response.status_code, 201)
@@ -379,7 +380,7 @@ class CCSApiSmokeTests(unittest.TestCase):
                 'birthday': '2005-03-03',
                 'course': 'BSIT',
                 'year_level': '3rd Year',
-                'section': 'D',
+                'section': 'B',
             },
         )
         self.assertEqual(create_student_three.status_code, 201)
@@ -394,9 +395,9 @@ class CCSApiSmokeTests(unittest.TestCase):
                 'day': 'Thursday',
                 'start_time': '1:00 PM',
                 'end_time': '3:00 PM',
-                'students': 99,
                 'year_level': '3rd Year',
-                'section': 'D',
+                'section': 'B',
+                'semester': '1st Semester',
             },
         )
         self.assertEqual(update_response.status_code, 200)
@@ -546,6 +547,119 @@ class CCSApiSmokeTests(unittest.TestCase):
         self.assertEqual(self.client.delete(f'/api/lessons/{lesson_id}').status_code, 200)
         self.assertEqual(self.client.delete(f'/api/curriculum/{curriculum_id}').status_code, 200)
         self.assertEqual(self.client.delete(f'/api/syllabus/{syllabus_id}').status_code, 200)
+
+    def test_section_capacity_assignment_options_and_announcements(self):
+        available_sections = self.client.get('/api/sections?course=BSIT&year_level=1st%20Year&available_only=true')
+        self.assertEqual(available_sections.status_code, 200)
+        section_codes = {item['section'] for item in available_sections.get_json()['data']}
+        self.assertIn('A', section_codes)
+
+        for index in range(1, 51):
+            response = self.client.post(
+                '/api/students',
+                json={
+                    'student_id': f'2026-91{index:02d}',
+                    'first_name': f'Student{index}',
+                    'last_name': 'Capacity',
+                    'birthday': '2005-01-01',
+                    'course': 'BSIT',
+                    'year_level': '1st Year',
+                    'section': 'A',
+                },
+            )
+            self.assertEqual(response.status_code, 201)
+
+        full_sections = self.client.get('/api/sections?course=BSIT&year_level=1st%20Year&available_only=true')
+        self.assertEqual(full_sections.status_code, 200)
+        full_section_codes = {item['section'] for item in full_sections.get_json()['data']}
+        self.assertNotIn('A', full_section_codes)
+
+        overflow_response = self.client.post(
+            '/api/students',
+            json={
+                'student_id': '2026-9991',
+                'first_name': 'Overflow',
+                'last_name': 'Student',
+                'birthday': '2005-01-01',
+                'course': 'BSIT',
+                'year_level': '1st Year',
+                'section': 'A',
+            },
+        )
+        self.assertEqual(overflow_response.status_code, 400)
+
+        bootstrap_response = self.client.post(
+            '/api/schedules/bootstrap',
+            json={'course': 'BSIT', 'semester': '1st Semester', 'year_level': '1st Year'},
+        )
+        self.assertEqual(bootstrap_response.status_code, 200)
+
+        schedule_response = self.client.get('/api/schedules?course=BSIT&semester=1st%20Semester&year_level=1st%20Year')
+        self.assertEqual(schedule_response.status_code, 200)
+        schedules = schedule_response.get_json()['data']
+        selected_schedule = next((item for item in schedules if item['section'] == 'A' and item['subject_code']), None)
+        self.assertIsNotNone(selected_schedule)
+
+        faculty_options = self.client.get(f"/api/schedules/{selected_schedule['id']}/faculty-options")
+        self.assertEqual(faculty_options.status_code, 200)
+        options = faculty_options.get_json()['data']
+        self.assertTrue(any(option['department'] == 'BSIT' for option in options))
+
+        assignable_option = next((option for option in options if option['available']), None)
+        self.assertIsNotNone(assignable_option)
+
+        assign_response = self.client.put(
+            f"/api/schedules/{selected_schedule['id']}",
+            json={'faculty_id': assignable_option['faculty_id']},
+        )
+        self.assertEqual(assign_response.status_code, 200)
+        self.assertEqual(assign_response.get_json()['data']['faculty_id'], assignable_option['faculty_id'])
+
+        announcement_response = self.client.post(
+            '/api/announcements',
+            json={
+                'schedule_id': selected_schedule['id'],
+                'title': 'Week 1 update',
+                'content': 'Please review the introductory discussion before class.',
+            },
+        )
+        self.assertEqual(announcement_response.status_code, 201)
+
+        listing_response = self.client.get(f"/api/announcements?schedule_id={selected_schedule['id']}")
+        self.assertEqual(listing_response.status_code, 200)
+        self.assertTrue(any(item['title'] == 'Week 1 update' for item in listing_response.get_json()['data']))
+
+    def test_student_schedule_scope_respects_semester_and_keeps_unassigned_subjects_visible(self):
+        create_response = self.client.post(
+            '/api/students',
+            json={
+                'student_id': '2026-8201',
+                'first_name': 'Mika',
+                'last_name': 'Santos',
+                'birthday': '2005-07-19',
+                'course': 'BSIT',
+                'year_level': '1st Year',
+                'semester': '1st Semester',
+                'section': 'C',
+            },
+        )
+        self.assertEqual(create_response.status_code, 201)
+
+        student_login = self.client.post(
+            '/api/auth/login',
+            json={'email': '2026-8201', 'password': '2005-07-19'},
+        )
+        self.assertEqual(student_login.status_code, 200)
+        student_actor = student_login.get_json()['user']
+        headers = {'X-Actor-Id': str(student_actor['id'])}
+
+        schedules_response = self.client.get('/api/schedules?sync=true', headers=headers)
+        self.assertEqual(schedules_response.status_code, 200)
+        student_schedules = schedules_response.get_json()['data']
+
+        self.assertEqual(len(student_schedules), 7)
+        self.assertTrue(all(item['semester'] == '1st Semester' for item in student_schedules))
+        self.assertTrue(any(item['assignment_status'] == 'Unassigned' for item in student_schedules))
 
 
 if __name__ == '__main__':
