@@ -658,6 +658,7 @@ class Section(BaseModel):
         "id": None,
         "course": None,
         "year_level": None,
+        "semester": "1st Semester",
         "name": None,
         "capacity": 50,
         "is_active": True,
@@ -666,14 +667,15 @@ class Section(BaseModel):
         "updated_at": datetime.utcnow,
     }
     datetime_fields = {"created_at", "updated_at"}
-    indexes = [["course"], ["year_level"], ["name"], ["tenant_id"]]
-    unique_indexes = [["course", "year_level", "name", "tenant_id"]]
+    indexes = [["course"], ["year_level"], ["semester"], ["name"], ["tenant_id"]]
+    unique_indexes = [["course", "year_level", "semester", "name", "tenant_id"]]
 
     def to_dict(self):
         return {
             "id": self.id,
             "course": self.course,
             "year_level": self.year_level,
+            "semester": getattr(self, "semester", None) or "1st Semester",
             "name": self.name,
             "section": self.name,
             "capacity": self.capacity,

@@ -153,7 +153,10 @@ def create_announcement():
             "ANNOUNCEMENT",
             entity_id=announcement.id,
             entity_name=announcement.title,
-            details={"schedule_id": announcement.schedule_id, "section_key": section_key(schedule.course, schedule.year_level, schedule.section)},
+            details={
+                "schedule_id": announcement.schedule_id,
+                "section_key": section_key(schedule.course, schedule.year_level, schedule.semester, schedule.section),
+            },
             req=request,
             tenant_id=announcement.tenant_id,
         )

@@ -23,6 +23,8 @@ export const StudentForm = React.memo(({
   const selectedCourse = lockedCourse || formData.course || 'BSIT';
   const selectedYearLevel = formData.year_level || '1st Year';
   const selectedSemester = formData.semester || '1st Semester';
+  const assignedSection = formData.section || sectionOptions[0]?.section || '';
+  const assignedSectionMeta = sectionOptions[0] || null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm" onClick={onCancel}>
@@ -142,7 +144,10 @@ export const StudentForm = React.memo(({
                 autoComplete="off"
                 className="w-full rounded-xl border border-gray-300 px-4 py-2 outline-none transition-all focus:ring-2 focus:ring-orange-500"
                 value={selectedSemester}
-                onChange={(event) => handleChange('semester', event.target.value)}
+                onChange={(event) => {
+                  handleChange('semester', event.target.value);
+                  handleChange('section', '');
+                }}
               >
                 {TERM_SEMESTERS.map((semester) => (
                   <option key={semester} value={semester}>{semester}</option>
@@ -151,26 +156,27 @@ export const StudentForm = React.memo(({
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">Section *</label>
-              <select
-                required
-                autoComplete="off"
-                className="w-full rounded-xl border border-gray-300 px-4 py-2 outline-none transition-all focus:ring-2 focus:ring-orange-500 disabled:bg-gray-100"
-                value={formData.section || ''}
-                onChange={(event) => handleChange('section', event.target.value)}
-                disabled={sectionLoading || sectionOptions.length === 0}
-              >
-                <option value="">
-                  {sectionLoading ? 'Loading sections...' : sectionOptions.length === 0 ? 'No available sections' : 'Select Section'}
-                </option>
-                {sectionOptions.map((item) => (
-                  <option key={`${item.course}-${item.year_level}-${item.section}`} value={item.section}>
-                    {`Section ${item.section} • ${item.remaining_slots} slot(s) left`}
-                  </option>
-                ))}
-              </select>
+              <label className="mb-1 block text-sm font-medium text-gray-700">Section Assignment *</label>
+              <input
+                type="text"
+                readOnly
+                className="w-full rounded-xl border border-gray-300 bg-gray-50 px-4 py-2 text-gray-700 outline-none"
+                value={
+                  sectionLoading
+                    ? 'Loading section assignment...'
+                    : assignedSection
+                      ? `Section ${assignedSection}`
+                      : 'Waiting for course, year level, and semester'
+                }
+              />
               <p className="mt-1 text-xs text-gray-400">
-                {selectedCourse} • {selectedYearLevel} sections are limited to 50 students each.
+                {sectionLoading
+                  ? 'The system is checking the next available section.'
+                  : assignedSectionMeta
+                    ? assignedSectionMeta.is_virtual
+                      ? `${selectedCourse} - ${selectedYearLevel} - ${selectedSemester} will create Section ${assignedSectionMeta.section} on save.`
+                      : `${selectedCourse} - ${selectedYearLevel} - ${selectedSemester} still has ${assignedSectionMeta.remaining_slots} slot(s) left in Section ${assignedSectionMeta.section}.`
+                    : `${selectedCourse} - ${selectedYearLevel} - ${selectedSemester} sections are limited to 50 students each.`}
               </p>
             </div>
 

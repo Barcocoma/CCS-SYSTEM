@@ -549,7 +549,7 @@ class CCSApiSmokeTests(unittest.TestCase):
         self.assertEqual(self.client.delete(f'/api/syllabus/{syllabus_id}').status_code, 200)
 
     def test_section_capacity_assignment_options_and_announcements(self):
-        available_sections = self.client.get('/api/sections?course=BSIT&year_level=1st%20Year&available_only=true')
+        available_sections = self.client.get('/api/sections?course=BSIT&year_level=1st%20Year&semester=1st%20Semester&available_only=true')
         self.assertEqual(available_sections.status_code, 200)
         section_codes = {item['section'] for item in available_sections.get_json()['data']}
         self.assertIn('A', section_codes)
@@ -569,7 +569,7 @@ class CCSApiSmokeTests(unittest.TestCase):
             )
             self.assertEqual(response.status_code, 201)
 
-        full_sections = self.client.get('/api/sections?course=BSIT&year_level=1st%20Year&available_only=true')
+        full_sections = self.client.get('/api/sections?course=BSIT&year_level=1st%20Year&semester=1st%20Semester&available_only=true')
         self.assertEqual(full_sections.status_code, 200)
         full_section_codes = {item['section'] for item in full_sections.get_json()['data']}
         self.assertNotIn('A', full_section_codes)
