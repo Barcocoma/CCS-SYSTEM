@@ -5,6 +5,7 @@ from flask import Blueprint, jsonify, request
 from academic_defaults import COURSE_OPTIONS, SEMESTER_OPTIONS
 from academic_logic import (
     build_faculty_assignment_options,
+    cleanup_inactive_sections_and_schedules,
     count_students_in_section,
     ensure_schedule_offerings,
     get_schedule_conflict_details,
@@ -34,15 +35,17 @@ def parse_bool(value):
     return str(value or "").strip().lower() in {"1", "true", "yes", "y"}
 
 
-def count_matching_students(course, year_level=None, section=None, tenant_id=None):
+def count_matching_students(course, year_level=None, semester=None, section=None, tenant_id=None):
     normalized_course = normalize_course(course)
     normalized_year_level = normalize_year_level(year_level)
+    normalized_semester = (semester or "").strip()
     normalized_section = normalize_section(section)
 
     if normalized_section:
         return count_students_in_section(
             course=normalized_course,
             year_level=normalized_year_level,
+            semester=normalized_semester,
             section=normalized_section,
             tenant_id=tenant_id,
         )
@@ -50,6 +53,8 @@ def count_matching_students(course, year_level=None, section=None, tenant_id=Non
     query = Student.query.filter(Student.course == normalized_course)
     if normalized_year_level:
         query = query.filter(Student.year_level == normalized_year_level)
+    if normalized_semester:
+        query = query.filter(Student.semester == normalized_semester)
     if tenant_id:
         query = query.filter(Student.tenant_id == tenant_id)
     return query.count()
@@ -95,9 +100,15 @@ def validate_schedule_payload(payload, schedule_id=None):
     year_level = normalize_year_level(payload.get("year_level"))
     section = normalize_section(payload.get("section"))
     if section and year_level:
-        available_sections = list_sections(course=course, year_level=year_level, tenant_id=payload.get("tenant_id"))
+        available_sections = list_sections(
+            course=course,
+            year_level=year_level,
+            semester=semester,
+            tenant_id=payload.get("tenant_id"),
+            available_only=False,
+        )
         if not any(normalize_section(item["section"]) == section for item in available_sections):
-            return f"Section {section} is not configured for {course} {year_level}"
+            return f"Section {section} has no enrolled students yet for {course} {year_level} {semester}"
 
     faculty_id = payload.get("faculty_id")
     if faculty_id is not None:
@@ -161,6 +172,7 @@ def build_schedule_payload(data, current_schedule=None):
     payload["students"] = count_matching_students(
         course=payload["course"],
         year_level=payload["year_level"],
+        semester=payload["semester"],
         section=payload["section"],
         tenant_id=payload["tenant_id"],
     )
@@ -245,7 +257,14 @@ def bootstrap_schedules():
         semester = (payload.get("semester") or "").strip() or None
 
         changed = ensure_schedule_offerings(course=course, year_level=year_level, semester=semester, tenant_id=tenant_id)
-        changed = refresh_schedule_student_counts(course, year_level, payload.get("section"), tenant_id=tenant_id) or changed
+        changed = cleanup_inactive_sections_and_schedules(
+            course,
+            year_level,
+            semester,
+            payload.get("section"),
+            tenant_id=tenant_id,
+        ) or changed
+        changed = refresh_schedule_student_counts(course, year_level, semester, payload.get("section"), tenant_id=tenant_id) or changed
         if changed:
             db.session.commit()
 
@@ -282,7 +301,13 @@ def create_schedule():
         schedule = Schedule(**payload)
         db.session.add(schedule)
         db.session.commit()
-        refresh_schedule_student_counts(schedule.course, schedule.year_level, schedule.section, tenant_id=schedule.tenant_id)
+        refresh_schedule_student_counts(
+            schedule.course,
+            schedule.year_level,
+            schedule.semester,
+            schedule.section,
+            tenant_id=schedule.tenant_id,
+        )
         db.session.commit()
 
         log_audit_event(
@@ -327,7 +352,7 @@ def update_schedule(schedule_id):
             return jsonify({"success": False, "message": "Schedule not found"}), 404
 
         data = request.get_json(silent=True) or {}
-        old_scope = (schedule.course, schedule.year_level, schedule.section, schedule.tenant_id)
+        old_scope = (schedule.course, schedule.year_level, schedule.semester, schedule.section, schedule.tenant_id)
         payload = build_schedule_payload(data, current_schedule=schedule)
         validation_error = validate_schedule_payload(payload, schedule_id=schedule.id)
         if validation_error:
@@ -353,13 +378,21 @@ def update_schedule(schedule_id):
 
         db.session.commit()
         refreshed = False
-        for course_value, year_value, section_value, tenant_value in {
+        for course_value, year_value, semester_value, section_value, tenant_value in {
             old_scope,
-            (schedule.course, schedule.year_level, schedule.section, schedule.tenant_id),
+            (schedule.course, schedule.year_level, schedule.semester, schedule.section, schedule.tenant_id),
         }:
+            refreshed = cleanup_inactive_sections_and_schedules(
+                course_value,
+                year_value,
+                semester_value,
+                section_value,
+                tenant_id=tenant_value,
+            ) or refreshed
             refreshed = refresh_schedule_student_counts(
                 course_value,
                 year_value,
+                semester_value,
                 section_value,
                 tenant_id=tenant_value,
             ) or refreshed
@@ -398,10 +431,13 @@ def delete_schedule(schedule_id):
 
         details = {"course": schedule.course, "day": schedule.day, "semester": schedule.semester}
         entity_name = schedule.subject_code or schedule.subject
-        scope = (schedule.course, schedule.year_level, schedule.section, schedule.tenant_id)
+        scope = (schedule.course, schedule.year_level, schedule.semester, schedule.section, schedule.tenant_id)
         db.session.delete(schedule)
         db.session.commit()
-        if refresh_schedule_student_counts(scope[0], scope[1], scope[2], tenant_id=scope[3]):
+        changed = cleanup_inactive_sections_and_schedules(scope[0], scope[1], scope[2], scope[3], tenant_id=scope[4])
+        if refresh_schedule_student_counts(scope[0], scope[1], scope[2], scope[3], tenant_id=scope[4]):
+            changed = True
+        if changed:
             db.session.commit()
 
         log_audit_event(

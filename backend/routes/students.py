@@ -10,7 +10,15 @@ if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
 from academic_defaults import SEMESTER_OPTIONS
-from academic_logic import ensure_default_sections, ensure_schedule_offerings, refresh_schedule_student_counts, validate_student_section_availability
+from academic_logic import (
+    cleanup_inactive_sections_and_schedules,
+    ensure_schedule_offerings,
+    ensure_section_record,
+    list_sections,
+    normalize_section,
+    refresh_schedule_student_counts,
+    validate_student_section_availability,
+)
 from audit import log_audit_event
 from authz import (
     get_request_actor,
@@ -72,6 +80,42 @@ def resolve_student_semester(data, current_student=None):
     return semester or SEMESTER_OPTIONS[0]
 
 
+def resolve_student_section(data, current_student=None):
+    course = (data.get('course') or (current_student.course if current_student else '')).strip()
+    year_level = (data.get('year_level') or (current_student.year_level if current_student else '')).strip()
+    semester = resolve_student_semester(data, current_student=current_student)
+    tenant_id = (data.get('tenant_id') or (current_student.tenant_id if current_student else '') or '').strip() or None
+    requested_section = normalize_section(data.get('section'))
+
+    if requested_section:
+        return requested_section
+
+    preserve_section = ''
+    if current_student:
+        current_scope = (
+            (current_student.course or '').strip(),
+            (current_student.year_level or '').strip(),
+            (current_student.semester or '').strip(),
+        )
+        requested_scope = (course, year_level, semester)
+        if current_scope == requested_scope:
+            preserve_section = normalize_section(current_student.section)
+
+    available_sections = list_sections(
+        course=course,
+        year_level=year_level,
+        semester=semester,
+        tenant_id=tenant_id,
+        available_only=True,
+        exclude_student_record_id=current_student.id if current_student else None,
+        include_section=preserve_section,
+    )
+    if available_sections:
+        return normalize_section(available_sections[0].get('section'))
+
+    return preserve_section or 'A'
+
+
 def build_student_user_account(student_number, birthday, tenant_id):
     account_identifier = normalize_account_identifier(student_number)
     if not account_identifier:
@@ -97,7 +141,7 @@ def build_student_user_account(student_number, birthday, tenant_id):
 
 
 def validate_student_payload(data, is_update=False, current_student=None):
-    required_fields = ['student_id', 'first_name', 'last_name', 'birthday', 'course', 'year_level', 'section']
+    required_fields = ['student_id', 'first_name', 'last_name', 'birthday', 'course', 'year_level']
     if not is_update:
         missing = [field for field in required_fields if not (data.get(field) or '').strip()]
         if missing:
@@ -112,7 +156,7 @@ def validate_student_payload(data, is_update=False, current_student=None):
     course = (data.get('course') or (current_student.course if current_student else '')).strip()
     year_level = (data.get('year_level') or (current_student.year_level if current_student else '')).strip()
     semester = resolve_student_semester(data, current_student=current_student)
-    section = (data.get('section') or (current_student.section if current_student else '')).strip()
+    section = resolve_student_section(data, current_student=current_student)
     tenant_id = (data.get('tenant_id') or (current_student.tenant_id if current_student else '') or '').strip() or None
 
     if semester not in SEMESTER_OPTIONS:
@@ -121,6 +165,7 @@ def validate_student_payload(data, is_update=False, current_student=None):
     section_error = validate_student_section_availability(
         course=course,
         year_level=year_level,
+        semester=semester,
         section=section,
         tenant_id=tenant_id,
         current_student_id=current_student.id if current_student else None,
@@ -244,7 +289,6 @@ def create_student():
     data = request.get_json(silent=True) or {}
     actor_role, chair_department = resolve_actor_scope()
     tenant_id = (data.get('tenant_id') or '').strip() or None
-    ensure_default_sections(tenant_id=tenant_id)
 
     if actor_role == 'CHAIR':
         if not chair_department:
@@ -262,6 +306,7 @@ def create_student():
         student_number = data.get('student_id', '').strip()
         birthday = parse_birthday((data.get('birthday') or '').strip())
         semester = resolve_student_semester(data)
+        section = resolve_student_section(data)
 
         account = build_student_user_account(student_number, birthday, tenant_id)
 
@@ -276,10 +321,11 @@ def create_student():
             course=(data.get('course') or '').strip() or None,
             year_level=(data.get('year_level') or '').strip() or None,
             semester=semester,
-            section=(data.get('section') or '').strip().upper() or None,
+            section=section or None,
             enrollment_status='Enrolled',
             tenant_id=tenant_id,
         )
+        ensure_section_record(student.course, student.year_level, student.semester, student.section, tenant_id=student.tenant_id)
         db.session.add(account)
         db.session.add(student)
         db.session.commit()
@@ -289,7 +335,13 @@ def create_student():
             semester=student.semester,
             tenant_id=student.tenant_id,
         )
-        if refresh_schedule_student_counts(student.course, student.year_level, student.section, tenant_id=student.tenant_id):
+        if refresh_schedule_student_counts(
+            student.course,
+            student.year_level,
+            student.semester,
+            student.section,
+            tenant_id=student.tenant_id,
+        ):
             changed = True
         if changed:
             db.session.commit()
@@ -355,7 +407,6 @@ def update_student(student_id):
     student = Student.query.get_or_404(student_id)
     data = request.get_json(silent=True) or {}
     actor_role, chair_department = resolve_actor_scope()
-    ensure_default_sections(tenant_id=(data.get('tenant_id') or student.tenant_id or '').strip() or None)
 
     if actor_role == 'CHAIR':
         if not chair_department:
@@ -378,7 +429,9 @@ def update_student(student_id):
         except ValueError:
             return jsonify({'success': False, 'message': 'birthday must be YYYY-MM-DD'}), 400
 
-    old_scope = (student.course, student.year_level, student.section, student.tenant_id)
+    old_scope = (student.course, student.year_level, student.semester, student.section, student.tenant_id)
+    next_semester = resolve_student_semester(data, current_student=student)
+    next_section = resolve_student_section(data, current_student=student)
     student.student_id = (data.get('student_id') or student.student_id).strip()
     student.first_name = (data.get('first_name') or student.first_name).strip()
     student.last_name = (data.get('last_name') or student.last_name).strip()
@@ -387,23 +440,32 @@ def update_student(student_id):
     student.contact_number = (data.get('contact_number') or '').strip() or None
     student.course = (data.get('course') or student.course or '').strip() or None
     student.year_level = (data.get('year_level') or student.year_level or '').strip() or None
-    student.semester = resolve_student_semester(data, current_student=student)
-    student.section = (data.get('section') or student.section or '').strip().upper() or None
+    student.semester = next_semester
+    student.section = next_section or None
     student.enrollment_status = 'Enrolled'
     student.tenant_id = (data.get('tenant_id') or student.tenant_id or '').strip() or None
 
+    ensure_section_record(student.course, student.year_level, student.semester, student.section, tenant_id=student.tenant_id)
     db.session.commit()
-    scopes = {old_scope, (student.course, student.year_level, student.section, student.tenant_id)}
+    scopes = {old_scope, (student.course, student.year_level, student.semester, student.section, student.tenant_id)}
     refreshed = ensure_schedule_offerings(
         course=student.course,
         year_level=student.year_level,
         semester=student.semester,
         tenant_id=student.tenant_id,
     )
-    for course_value, year_level_value, section_value, tenant_value in scopes:
+    for course_value, year_level_value, semester_value, section_value, tenant_value in scopes:
+        refreshed = cleanup_inactive_sections_and_schedules(
+            course_value,
+            year_level_value,
+            semester_value,
+            section_value,
+            tenant_id=tenant_value,
+        ) or refreshed
         refreshed = refresh_schedule_student_counts(
             course_value,
             year_level_value,
+            semester_value,
             section_value,
             tenant_id=tenant_value,
         ) or refreshed
@@ -434,10 +496,13 @@ def delete_student(student_id):
     entity_name = f'{student.first_name} {student.last_name}'
     tenant_id = student.tenant_id
     student_number = student.student_id
-    schedule_scope = (student.course, student.year_level, student.section, student.tenant_id)
+    schedule_scope = (student.course, student.year_level, student.semester, student.section, student.tenant_id)
     db.session.delete(student)
     db.session.commit()
-    if refresh_schedule_student_counts(*schedule_scope[:3], tenant_id=schedule_scope[3]):
+    changed = cleanup_inactive_sections_and_schedules(*schedule_scope[:4], tenant_id=schedule_scope[4])
+    if refresh_schedule_student_counts(*schedule_scope[:4], tenant_id=schedule_scope[4]):
+        changed = True
+    if changed:
         db.session.commit()
     log_audit_event(
         'DELETE',

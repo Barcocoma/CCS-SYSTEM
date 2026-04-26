@@ -977,8 +977,8 @@ export function StudentRecords({ navigationIntent, clearNavigationIntent, onNavi
   ]);
 
   const fetchSectionOptions = useCallback(
-    async ({ course, yearLevel, studentRecordId = null, includeSection = '' } = {}) => {
-      if (!course || !yearLevel) {
+    async ({ course, yearLevel, semester, studentRecordId = null, includeSection = '' } = {}) => {
+      if (!course || !yearLevel || !semester) {
         setSectionOptions([]);
         return;
       }
@@ -988,6 +988,7 @@ export function StudentRecords({ navigationIntent, clearNavigationIntent, onNavi
         const params = new URLSearchParams({
           course,
           year_level: yearLevel,
+          semester,
           available_only: 'true',
         });
         if (studentRecordId) params.append('student_record_id', String(studentRecordId));
@@ -1012,10 +1013,25 @@ export function StudentRecords({ navigationIntent, clearNavigationIntent, onNavi
     fetchSectionOptions({
       course: formData.course,
       yearLevel: formData.year_level,
+      semester: formData.semester,
       studentRecordId: showEditModal ? selectedStudent?.id : null,
-      includeSection: formData.section,
+      includeSection: showEditModal ? formData.section : '',
     });
-  }, [fetchSectionOptions, formData.course, formData.section, formData.year_level, selectedStudent?.id, showAddModal, showEditModal]);
+  }, [fetchSectionOptions, formData.course, formData.semester, formData.year_level, selectedStudent?.id, showAddModal, showEditModal]);
+
+  useEffect(() => {
+    if (!showAddModal && !showEditModal) {
+      return;
+    }
+
+    const suggestedSection = sectionOptions[0]?.section || '';
+    setFormData((current) => {
+      if ((current.section || '') === suggestedSection) {
+        return current;
+      }
+      return { ...current, section: suggestedSection };
+    });
+  }, [sectionOptions, showAddModal, showEditModal]);
 
   const quickSkillQueries = useMemo(
     () => getTopItems(scopedStudents.flatMap((student) => (student.skills || []).map((skill) => skill.skill_name))),
@@ -1374,7 +1390,7 @@ export function StudentRecords({ navigationIntent, clearNavigationIntent, onNavi
           skippedDepartment += 1;
           return;
         }
-        validPayloads.push(payload);
+        validPayloads.push({ ...payload, section: '' });
       });
 
       if (validPayloads.length === 0) {
