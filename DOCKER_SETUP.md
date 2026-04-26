@@ -6,7 +6,8 @@
 
 - `frontend` on port `3000`
 - `backend` on port `5000`
-- `mongodb` on port `27017`
+
+Firebase Firestore is external, so Docker does not start a database container anymore.
 
 ## Start the Stack
 
@@ -26,12 +27,6 @@ docker-compose up -d --build
 docker-compose down
 ```
 
-Remove volumes too:
-
-```bash
-docker-compose down -v
-```
-
 ## View Logs
 
 ```bash
@@ -43,14 +38,13 @@ Specific service logs:
 ```bash
 docker-compose logs -f frontend
 docker-compose logs -f backend
-docker-compose logs -f mongodb
 ```
 
 ## Docker Notes
 
 - Frontend expects the backend at `http://localhost:5000`
-- Backend uses the MongoDB container defined in `docker-compose.yml`
-- Run `python init_db.py` inside the backend container or locally after the stack starts to seed demo data
+- Backend expects Firebase env vars from your local `.env`
+- Run `python init_db.py` in the backend container or locally after the stack starts to seed demo data
 
 ## Seed Demo Data in Docker
 

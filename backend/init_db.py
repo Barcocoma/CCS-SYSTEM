@@ -4,13 +4,13 @@ from seeds import seed_demo_data
 
 
 def init_database():
-    """Initialize Mongo collections/indexes and demo data."""
+    """Initialize Firestore collections and demo data."""
     with app.app_context():
         try:
             db.create_all()
             seed_demo_data()
             db.session.commit()
-            print("MongoDB collections initialized successfully.")
+            print("Firestore collections initialized successfully.")
             print("Demo accounts (password: admin123):")
             print("- admin@example.com (DEAN)")
             print("- chair@example.com (CHAIR)")
@@ -20,7 +20,7 @@ def init_database():
         except Exception as exc:
             db.session.rollback()
             print(f"Error initializing database: {exc}")
-            print("Make sure MongoDB is running and the configured credentials are correct.")
+            print("Make sure Firebase credentials and Firestore settings are configured correctly.")
 
 
 if __name__ == '__main__':

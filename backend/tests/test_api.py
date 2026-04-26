@@ -7,8 +7,7 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-os.environ['MONGO_MOCK'] = 'true'
-os.environ['MONGO_DB_NAME'] = 'ccs_system_test'
+os.environ['DB_MOCK'] = 'true'
 
 from app import create_app  # noqa: E402
 from models import db  # noqa: E402
@@ -21,8 +20,7 @@ class CCSApiSmokeTests(unittest.TestCase):
         cls.app = create_app(
             {
                 'TESTING': True,
-                'MONGO_MOCK': True,
-                'MONGO_DB_NAME': 'ccs_system_test',
+                'DB_MOCK': True,
             }
         )
 

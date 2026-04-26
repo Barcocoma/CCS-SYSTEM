@@ -21,29 +21,11 @@ services:
     command: /bin/sh -c "python init_db.py && python app.py"
     environment:
       - FLASK_ENV=development
-      - MONGO_HOST=mongodb
-      - MONGO_PORT=27017
-      - MONGO_USER=itew6_user
-      - MONGO_PASSWORD=itew6_password
-      - MONGO_DB_NAME=itew6_db
-      - MONGO_AUTH_DB=admin
       - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
-    depends_on:
-      - mongodb
-
-  mongodb:
-    image: mongo:7
-    container_name: itew6-mongodb
-    restart: unless-stopped
-    environment:
-      - MONGO_INITDB_ROOT_USERNAME=itew6_user
-      - MONGO_INITDB_ROOT_PASSWORD=itew6_password
-      - MONGO_INITDB_DATABASE=itew6_db
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongodb_data:/data/db
-
-volumes:
-  mongodb_data:
-
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev-jwt-secret-key-change-in-production}
+      - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID}
+      - FIREBASE_DATABASE_ID=${FIREBASE_DATABASE_ID}
+      - FIREBASE_SERVICE_ACCOUNT_PATH=${FIREBASE_SERVICE_ACCOUNT_PATH}
+      - FIREBASE_SERVICE_ACCOUNT_JSON=${FIREBASE_SERVICE_ACCOUNT_JSON}
+      - FIREBASE_SERVICE_ACCOUNT_JSON_BASE64=${FIREBASE_SERVICE_ACCOUNT_JSON_BASE64}
+      - DB_MOCK=${DB_MOCK:-false}

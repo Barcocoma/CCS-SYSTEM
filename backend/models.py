@@ -8,24 +8,13 @@ from datetime import date, datetime, timezone
 from typing import Any, Iterable
 
 from flask import abort
-from pymongo import ASCENDING, DESCENDING, MongoClient, ReturnDocument
-
-try:
-    import mongomock  # type: ignore
-except Exception:  # pragma: no cover
-    mongomock = None
-
+from datastore import ASCENDING, DESCENDING, FirestoreDocumentDB
 from werkzeug.security import check_password_hash, generate_password_hash
 
 
-class _NoopEngine:
-    def dispose(self) -> None:
-        return None
-
-
-class MongoSession:
-    def __init__(self, mongo_db: "MongoDB"):
-        self._mongo_db = mongo_db
+class DocumentSession:
+    def __init__(self, document_db: "FirestoreDocumentDB"):
+        self._document_db = document_db
         self._tracked: set[BaseModel] = set()
 
     def track(self, instance: "BaseModel") -> None:
@@ -59,84 +48,6 @@ class MongoSession:
 
     def remove(self) -> None:
         self._tracked.clear()
-
-
-class MongoDB:
-    def __init__(self):
-        self.client: MongoClient | None = None
-        self.database = None
-        self.session = MongoSession(self)
-        self.engine = _NoopEngine()
-
-    def init_app(self, app) -> None:
-        uri = app.config.get("MONGO_URI", "mongodb://localhost:27017/ccs_system")
-        db_name = app.config.get("MONGO_DB_NAME")
-        use_mock = bool(app.config.get("MONGO_MOCK", False))
-
-        if use_mock:
-            if mongomock is None:
-                raise RuntimeError("MONGO_MOCK=true but mongomock is not installed")
-            self.client = mongomock.MongoClient()
-        else:
-            self.client = MongoClient(uri)
-
-        if db_name:
-            self.database = self.client[db_name]
-        else:
-            try:
-                self.database = self.client.get_default_database()
-            except Exception:
-                self.database = None
-            if self.database is None:
-                self.database = self.client["ccs_system"]
-
-        self.create_all()
-
-    def get_collection(self, collection_name: str):
-        if self.database is None:
-            raise RuntimeError("Database is not initialized. Call db.init_app(app) first.")
-        return self.database[collection_name]
-
-    def next_id(self, collection_name: str) -> int:
-        counters = self.get_collection("_counters")
-        updated = counters.find_one_and_update(
-            {"_id": collection_name},
-            {"$inc": {"seq": 1}},
-            upsert=True,
-            return_document=ReturnDocument.AFTER,
-        )
-        return int(updated["seq"])
-
-    def create_all(self) -> None:
-        for model in MODEL_REGISTRY:
-            collection = self.get_collection(model.collection_name)
-            collection.create_index([("id", ASCENDING)], unique=True)
-            for index in getattr(model, "indexes", []):
-                if not index:
-                    continue
-                keys = []
-                for entry in index:
-                    if isinstance(entry, tuple):
-                        keys.append(entry)
-                    else:
-                        keys.append((entry, ASCENDING))
-                collection.create_index(keys)
-            for unique_index in getattr(model, "unique_indexes", []):
-                if not unique_index:
-                    continue
-                keys = []
-                for entry in unique_index:
-                    if isinstance(entry, tuple):
-                        keys.append(entry)
-                    else:
-                        keys.append((entry, ASCENDING))
-                collection.create_index(keys, unique=True)
-
-    def drop_all(self) -> None:
-        for model in MODEL_REGISTRY:
-            self.get_collection(model.collection_name).drop()
-        self.get_collection("_counters").drop()
-        self.session.remove()
 
 
 class Condition:
@@ -576,11 +487,10 @@ class BaseModel(metaclass=ModelMeta):
             return None
         if field_name in cls.date_fields and isinstance(value, date) and not isinstance(value, datetime):
             return value.isoformat()
+        if field_name in cls.datetime_fields and isinstance(value, datetime):
+            return value.isoformat()
         if field_name in cls.datetime_fields and isinstance(value, str):
-            try:
-                return datetime.fromisoformat(value)
-            except ValueError:
-                return value
+            return value
         return value
 
     @classmethod
@@ -592,6 +502,8 @@ class BaseModel(metaclass=ModelMeta):
                 return date.fromisoformat(value)
             except ValueError:
                 return None
+        if field_name in cls.datetime_fields and isinstance(value, datetime):
+            return value.replace(tzinfo=None)
         if field_name in cls.datetime_fields and isinstance(value, str):
             try:
                 return datetime.fromisoformat(value)
@@ -1385,4 +1297,5 @@ class AuditLog(BaseModel):
         }
 
 
-db = MongoDB()
+db = FirestoreDocumentDB()
+db.session = DocumentSession(db)

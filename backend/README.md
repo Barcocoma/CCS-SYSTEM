@@ -14,48 +14,24 @@ API URL: `http://localhost:5000`
 
 ## Environment Variables
 
-Use [`backend/.env.example`](/c:/Users/zoen/Downloads/ITEW6/Test%201%20-%20Start/CCS-SYSTEM/backend/.env.example) as a reference.
+Use [backend/.env.example](/c:/Users/zoen/Downloads/ITEW6/CCS-SYSTEM/backend/.env.example) as a reference.
 
-Main database settings:
+Main Firebase settings:
 
 ```env
-MONGO_HOST=localhost
-MONGO_PORT=27017
-MONGO_USER=itew6_user
-MONGO_PASSWORD=itew6_password
-MONGO_DB_NAME=itew6_db
-MONGO_AUTH_DB=admin
+FIREBASE_PROJECT_ID=your-firebase-project-id
+FIREBASE_DATABASE_ID=
+FIREBASE_SERVICE_ACCOUNT_PATH=
+FIREBASE_SERVICE_ACCOUNT_JSON_BASE64=
+DB_MOCK=false
 ```
+
+Use `FIREBASE_SERVICE_ACCOUNT_PATH` for local development or `FIREBASE_SERVICE_ACCOUNT_JSON_BASE64` for hosted deployments such as Render.
 
 ## Seeded Demo Account
 
 - Email: `admin@example.com`
 - Password: `admin123`
-
-## Main API Groups
-
-- `/api/auth`
-- `/api/students`
-- `/api/faculty`
-- `/api/schedules`
-- `/api/reports`
-- `/api/organizations`
-- `/api/research`
-- `/api/syllabus`
-- `/api/curriculum`
-- `/api/lessons`
-- `/api/audit-logs`
-
-## Student Query Support
-
-`GET /api/students` supports:
-
-- `search`
-- `course`
-- `year_level`
-- `skill`
-- `activity`
-- `affiliation`
 
 ## Testing
 
